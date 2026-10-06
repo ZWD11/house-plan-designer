@@ -1,0 +1,6 @@
+node_modules/
+__pycache__/
+*_analysis/
+*_check/
+*_design/
+.DS_Store
