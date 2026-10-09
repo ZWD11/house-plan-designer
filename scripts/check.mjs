@@ -1,7 +1,7 @@
 /**
  * 打开生成的设计器 HTML（无头 Chrome），检查户型并截图，给模型自查用。
  * 用法: node check.mjs 户型.html [输出目录]
- * 输出: report.json + plan2d.png（2D）+ overlay.png（叠原图底图，对照墙位）+ view3d.png（3D 鸟瞰）
+ * 输出: report.json（房间面积与开间进深、外围尺寸链、悬空墙端、问题清单）+ plan2d.png（2D）+ overlay.png（叠原图底图，对照墙位）+ view3d.png（3D 鸟瞰）
  * 第一次用先在本目录 npm install。
  */
 import puppeteer from 'puppeteer-core';
@@ -55,10 +55,12 @@ try {
       openingsDropped: Math.max(0, specOps - plan.openings.length),
       bounds_mm: [app.geo.bounds.x, app.geo.bounds.y, app.geo.bounds.w, app.geo.bounds.h].map(Math.round),
       totalArea_m2: r1(regions.reduce((s, r) => s + r.area, 0)),
-      rooms: regions.map(r => ({ name: r.labels.map(l => l.name).join(' + ') || '（未命名）', area_m2: r1(r.area), interior: [Math.round(r.interior.x), Math.round(r.interior.y)] }))
+      rooms: regions.map(r => ({ name: r.labels.map(l => l.name).join(' + ') || '（未命名）', area_m2: r1(r.area), size_mm: D.roomSize?.(r) || '异形', interior: [Math.round(r.interior.x), Math.round(r.interior.y)] }))
         .sort((a, b) => b.area_m2 - a.area_m2),
       labelsOutsideRooms: plan.rooms.filter(l => !labeled.has(l.id)).map(l => ({ name: l.name, at: [l.x, l.y] })),
       freeWallEnds: freeEnds,
+      // 外围三道尺寸（从里到外：门窗分段 / 墙厚+净距 / 总长），逐个和原图标注对数，差 30mm 以上就回去改墙
+      exteriorDims: D.exteriorDims?.(),
       issues: issues.map(i => `[${i.level}] ${i.msg}`),
     };
   });

@@ -68,6 +68,16 @@
 - `wallMat` 墙面：`latexWhite`、`latexGrey`、`latexSage`、`latexWarm`、`wallpaper`、`wallTile`、`woodPanel`。卫生间/厨房不填时自动用 `wallTile` 和 300mm 平顶吊顶。
 - `ceil` 吊顶：`{ "type": "none" | "flat" | "edge", "drop": 250, "edgeW": 450, "cove": true }`（edge 是边吊，cove 是灯带）。
 - `skirting` 踢脚线：`none` | `wood` | `metal`。
+- `tile` 自定义铺砖（可选，写了就按砖一块块铺，覆盖 `mat` 的预设纹理；不写的字段用默认值）：
+  ```json
+  "tile": { "w": 800, "h": 800, "gap": 2, "pattern": "grid", "color": "#e6e1d8", "grout": "#c4beb4", "tex": "marble", "origin": "center" }
+  ```
+  - `w` / `h` 砖的长宽 mm（常见 300×300、300×600、600×600、600×1200、750×1500、800×800、900×1800；木纹砖 200×1200、150×900）
+  - `gap` 灰缝 mm（常见 1~3，仿古砖 3~5）
+  - `pattern`：`grid` 直铺对缝、`half` 工字铺（1/2 错缝）、`third` 1/3 错缝、`diag` 斜铺 45°、`herring` 人字拼、`basket` 田字编织、`checker` 双色棋盘（配 `color2`）、`random` 随机错缝（木纹砖）
+  - `tex` 砖面纹理：`plain` 素色、`marble` 大理石纹、`stone` 石纹、`wood` 木纹、`terrazzo` 水磨石、`cement` 水泥灰
+  - `color` 砖色、`color2` 棋盘第二色、`grout` 缝色
+  - `origin`：`center` 房间居中起铺（四周切砖一样大，默认）/ `corner` 左上墙角整砖起铺；`ox` / `oy` 起铺偏移 mm；`rot` 0 或 90
 
 ### 结构 structs
 
@@ -163,6 +173,7 @@
 - `style`：`real` 写实（默认）；`diorama` 沙盘效果图（实物微缩模型感）：清晰的日光阴影、环境光遮蔽、加厚底座投影到背景、移轴景深、底座外沿暖光、地面房间名、圆润家具
 - `colorplan` 彩平图：正上方俯视、不变形的彩色平面图（售楼处 / 设计公司那种）。地面用真实材质纹理，墙剖到约 1.1m、墙顶压深色，家具带柔和投影和环境光遮蔽，吊顶上和挂在高处的东西不画；叠加房间名 + 面积、外围两道尺寸线、指北针。此模式只能平移和缩放，不能漫游；配色同样生效
 - `tilt`：沙盘鸟瞰时的微缩移轴景深，默认开
+- `cpDims`：彩平图上的尺寸，`simple` 简洁（默认：外围总尺寸 + 房间名下的开间 × 进深）/ `full` 完整（三道尺寸线）/ `none` 不标。彩平图是给业主看的展示图，一般用简洁；要当施工参考时用完整
 - `palette`：`plan` 方案原色（默认，直接用方案里的材质颜色）；主题色板：`cream` 奶油白、`wood` 原木、`morandi` 莫兰迪、`wabi` 侘寂、`nordic` 北欧、`midcentury` 中古、`chinese` 新中式、`french` 法式、`industrial` 工业风、`mono` 极简黑白、`coastal` 海风、`dusk` 深色夜景
 - 色板只改 3D 显示（鸟瞰、漫游、渲染出图都生效），不改方案材质；用户在 3D 视图的「🎨 风格」里随时切换，随方案保存
 - 用户没提就不写（默认写实 + 方案原色）；用户说“沙盘效果图 / 彩平图 / 奶油风 / 某种风格的效果”时写上对应值

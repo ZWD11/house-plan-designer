@@ -12,6 +12,13 @@
   analysis.json  像素级识别结果、比例、外轮廓
   analysis.png   原图叠加识别结果（墙段编号 W*、断口编号 G*、像素标尺），用来核对
   mask.png       墙体掩膜
+
+承重墙判断：先按墙体填充颜色聚类（深色一类 = 承重墙，多数户型图的画法）；
+颜色分不开（所有墙同一个颜色）时按厚度猜（≥180mm 算承重），这类会标成“待确认”，
+在 analysis.png 上墙号后面带 ?，一定要对照原图图例确认。
+尺寸校准：自动找出图上的尺寸线和尺寸界线（短斜杠 / 竖杠），把每条尺寸线上的刻度位置
+写进 analysis.json 的 dims_px，并在 analysis.png 上标成 T/B/L/R 编号——配合 axismap.py
+按标注尺寸逐段定位墙，比整体按比例换算精确得多。
 依赖: pip install numpy pillow opencv-python
 """
 import argparse, json, os, sys
@@ -30,6 +37,8 @@ ap.add_argument('--gray-max', type=int, default=175, help='墙体像素最大亮
 ap.add_argument('--sat-max', type=int, default=22, help='墙体像素最大色差（墙是纯灰/黑）')
 ap.add_argument('--out')
 ap.add_argument('--crop', type=int, nargs=4, metavar=('X0', 'Y0', 'X1', 'Y1'), help='只在这个像素范围内找墙（排除图例、logo）')
+ap.add_argument('--outlined', action='store_true', help='隔墙画成两条细线、中间留白（贝壳等）时打开：把细线围成的墙带也识别出来')
+ap.add_argument('--bearing-max', type=int, help='承重墙颜色的最大亮度（0-255）。默认自动按颜色聚类')
 a = ap.parse_args()
 
 img = Image.open(a.image).convert('RGB')
@@ -86,6 +95,19 @@ check = {}
 if a.total_width: check['width_scale'] = a.total_width / (X1 - X0)
 if a.total_height: check['height_scale'] = a.total_height / (Y1 - Y0)
 
+# 2b. 描边画法的隔墙：两条平行细线中间留白。闭运算把相距不到一个墙厚的平行细线填成实心带，再只留够长的带
+outlined = np.zeros(mask.shape, bool)
+if a.outlined:
+    thin = ((mx - mn < 40) & (mx < 150)).astype(np.uint8)
+    tmax, tmin, Lmin = int(round(280 / s)) + 2, max(2, int(round(70 / s))), max(12, int(round(900 / s)))
+    roi = np.zeros(mask.shape, np.uint8); roi[Y0:Y1, X0:X1] = 1
+    hb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((tmax, 1), np.uint8))
+    hb = cv2.morphologyEx(cv2.morphologyEx(hb, cv2.MORPH_OPEN, np.ones((tmin, 1), np.uint8)), cv2.MORPH_OPEN, np.ones((1, Lmin), np.uint8))
+    vb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((1, tmax), np.uint8))
+    vb = cv2.morphologyEx(cv2.morphologyEx(vb, cv2.MORPH_OPEN, np.ones((1, tmin), np.uint8)), cv2.MORPH_OPEN, np.ones((Lmin, 1), np.uint8))
+    outlined = ((hb | vb) > 0) & (roi > 0) & (mask == 0)
+    mask = mask.copy(); mask[outlined] = 255
+
 # 3. 拆成水平/竖直墙段：每个像素比较所在水平连续段和竖直连续段的长度
 m = mask > 0
 def runs(b):
@@ -103,7 +125,6 @@ hr, vr = runs(m), runs(m.T).T
 horiz = (m & (hr >= vr)).astype(np.uint8)
 vert = (m & (vr > hr)).astype(np.uint8)
 
-dark = mx < 60  # 黑色 = 承重墙（多数户型图的画法）
 segs = []
 for orient, b in (('h', horiz), ('v', vert)):
     n2, lab2, st2, _ = cv2.connectedComponentsWithStats(b, 4)
@@ -123,8 +144,12 @@ for orient, b in (('h', horiz), ('v', vert)):
             rows = np.nonzero(sub.any(1))[0]; prof = sub.sum(0)
             line = x + (np.arange(w) * prof).sum() / prof.sum() + .5
             s0, s1 = y + rows.min(), y + rows.max() + 1
-        dk = float(dark[y:y + h, x:x + w][sub].mean())
-        segs.append(dict(orient=orient, line=float(line), s0=float(s0), s1=float(s1), t=T, dark=dk > .5))
+        # 墙芯颜色：去掉边缘 1/4 墙厚后取亮度中位数（边缘有抗锯齿、描边）；描边墙记为白色
+        core = cv2.erode(sub.astype(np.uint8), np.ones((max(1, int(T / 4)) * 2 + 1,) * 2, np.uint8)) > 0
+        if not core.any(): core = sub
+        lum = float(np.median(mx[y:y + h, x:x + w][core]))
+        ol = float(outlined[y:y + h, x:x + w][sub].mean()) > .5
+        segs.append(dict(orient=orient, line=float(line), s0=float(s0), s1=float(s1), t=T, lum=255.0 if ol else lum, outlined=ol))
 
 # 合并同一条线上相互重叠/相接的碎段
 segs.sort(key=lambda q: (q['orient'], q['line'], q['s0']))
@@ -132,9 +157,37 @@ merged = []
 for q in segs:
     p = merged[-1] if merged else None
     if p and p['orient'] == q['orient'] and abs(p['line'] - q['line']) <= max(2, min(p['t'], q['t']) / 2) and q['s0'] <= p['s1'] + 1:
-        p['s1'] = max(p['s1'], q['s1']); p['t'] = max(p['t'], q['t']); p['dark'] = p['dark'] or q['dark']
+        L0, L1 = p['s1'] - p['s0'], q['s1'] - q['s0']
+        p['lum'] = (p['lum'] * L0 + q['lum'] * L1) / max(1, L0 + L1)
+        p['s1'] = max(p['s1'], q['s1']); p['t'] = max(p['t'], q['t']); p['outlined'] = p['outlined'] and q['outlined']
     else: merged.append(dict(q))
 segs = merged
+
+# 3b. 承重墙判断：按墙芯亮度做一维两类聚类（按长度加权的 Otsu）；两类差得够开 = 深色那类是承重墙
+def otsu(vals, wts):
+    order = np.argsort(vals); v, w = np.array(vals)[order], np.array(wts)[order]
+    best, thr, W = -1, None, w.sum()
+    for i in range(1, len(v)):
+        w0, w1 = w[:i].sum(), w[i:].sum()
+        if w0 < W * .06 or w1 < W * .06: continue
+        m0, m1 = (v[:i] * w[:i]).sum() / w0, (v[i:] * w[i:]).sum() / w1
+        sc = w0 * w1 * (m1 - m0) ** 2
+        if sc > best: best, thr, sep = sc, float((v[i - 1] + v[i]) / 2), float(m1 - m0)
+    return (thr, sep) if thr is not None else (None, 0)
+lums, lens = [q['lum'] for q in segs], [q['s1'] - q['s0'] for q in segs]
+thr, sep = (float(a.bearing_max), 99) if a.bearing_max is not None else otsu(lums, lens) if len(segs) > 2 else (None, 0)
+bearing_by = 'color' if thr is not None and sep >= 35 else 'thickness'
+for q in segs:
+    tmm = q['t'] * s
+    if bearing_by == 'color':
+        q['dark'] = bool(q['lum'] <= thr)
+        q['sure'] = bool(abs(q['lum'] - thr) > 12 and not (q['dark'] and tmm < 90))
+        q['why'] = f"颜色{'深' if q['dark'] else '浅'}（亮度 {q['lum']:.0f}，分界 {thr:.0f}）"
+    else:
+        q['dark'] = bool(tmm >= 180 and not q['outlined'])
+        q['sure'] = False
+        q['why'] = f"图上墙体颜色一致，按厚度 {tmm:.0f}mm 猜{'承重' if q['dark'] else '非承重'}"
+
 
 # 4. 断口：同一条线上两段墙之间的空隙 → 门窗候选
 light = (mx - mn < 30) & (mx >= 110) & (mx < 235)  # 窗户在墙带里画成细灰线
@@ -169,7 +222,7 @@ def endpoint(q, at_start):
             d = abs(sp - r['line'])
             if best is None or d < best[0]: best = (d, r['line'])
     if best: return best[1]
-    return sp + (q['t'] / 2 if at_start else -q['t'] / 2)  # 自由端：墙中线端点缩进半个墙厚
+    return sp  # 自由端：墙画到哪就到哪（设计器在自由端不再外延半个墙厚）
 
 walls = []
 for i, q in enumerate(segs):
@@ -178,7 +231,7 @@ for i, q in enumerate(segs):
     if q['orient'] == 'h': A, B = [R(mmx(e0)), R(mmy(q['line']))], [R(mmx(e1)), R(mmy(q['line']))]
     else: A, B = [R(mmx(q['line'])), R(mmy(e0))], [R(mmx(q['line'])), R(mmy(e1))]
     if A == B: continue
-    walls.append(dict(id=f'W{i}', a=A, b=B, t=t, bearing=bool(q['dark']), openings=[]))
+    walls.append(dict(id=f'W{i}', a=A, b=B, t=t, bearing=bool(q['dark']), openings=[], _sure=q['sure']))
 byid = {w['id']: w for w in walls}
 for j, g in enumerate(gaps):
     # 断口用一段墙跨过去：把两侧墙合并成一段，门窗挂在上面
@@ -188,11 +241,40 @@ for j, g in enumerate(gaps):
     f, t2 = (mmx if k == 0 else mmy)(g['s0']), (mmx if k == 0 else mmy)(g['s1'])
     wb.setdefault('_from', []).append(wa['id'])
     wa['b'] = list(wb['b']); wa['openings'] += [dict(type=g['guess'], **{'from': R(f), 'to': R(t2)}, _gap=f'G{j}')] + wb['openings']
-    wa['t'] = max(wa['t'], wb['t']); wa['bearing'] = wa['bearing'] or wb['bearing']
+    wa['t'] = max(wa['t'], wb['t']); wa['bearing'] = wa['bearing'] or wb['bearing']; wa['_sure'] = wa['_sure'] and wb['_sure']
     byid[wb['id']] = wa
     walls = [w for w in walls if w is not wb]
     for key in list(byid):
         if byid[key] is wb: byid[key] = wa
+
+# 4b. 尺寸线：墙体外轮廓之外、和外轮廓差不多长的细直线；尺寸界线（短竖杠 / 斜杠）穿过它的位置就是刻度
+def find_dims():
+    ink = ((mx < 170) & (mx - mn < 60)).astype(np.uint8)
+    res = {'top': [], 'bottom': [], 'left': [], 'right': []}
+    def scan(img, lo, hi, a0, a1, key, flip, span):
+        # img：水平方向就是原图，竖直方向传转置；在 [lo,hi) 行里找长细线
+        rows = img[lo:hi, a0:a1].astype(np.int64).sum(1) if hi > lo else np.array([], np.int64)
+        for i in np.argsort(-rows)[:12]:
+            if rows[i] < span * .3: break
+            y = lo + int(i)
+            if any(abs(y - d['at']) <= 4 for d in res[key]): continue
+            win = img[max(0, y - 7):y - 2, a0:a1].astype(bool), img[y + 3:y + 8, a0:a1].astype(bool)
+            hit = win[0].any(0) & win[1].any(0)
+            xs = np.nonzero(hit)[0]
+            ticks, run = [], []
+            for x in xs:
+                if run and x - run[-1] > 2: ticks.append(a0 + float(np.mean(run))); run = []
+                run.append(x)
+            if run: ticks.append(a0 + float(np.mean(run)))
+            if len(ticks) >= 2: res[key].append(dict(at=y, ticks=[round(t, 1) for t in ticks]))
+        res[key].sort(key=lambda d: d['at'], reverse=flip)
+    pad = int(.25 * max(X1 - X0, Y1 - Y0))
+    scan(ink, max(0, Y0 - pad), Y0 - 2, max(0, X0 - pad), min(W, X1 + pad), 'top', True, X1 - X0)
+    scan(ink, Y1 + 2, min(H, Y1 + pad), max(0, X0 - pad), min(W, X1 + pad), 'bottom', False, X1 - X0)
+    scan(ink.T, max(0, X0 - pad), X0 - 2, max(0, Y0 - pad), min(H, Y1 + pad), 'left', True, Y1 - Y0)
+    scan(ink.T, X1 + 2, min(W, X1 + pad), max(0, Y0 - pad), min(H, Y1 + pad), 'right', False, Y1 - Y0)
+    return res
+dims_px = find_dims()
 
 out_dir = a.out or os.path.splitext(a.image)[0] + '_analysis'
 os.makedirs(out_dir, exist_ok=True)
@@ -207,7 +289,7 @@ for w in draft['walls']:
 json.dump(draft, open(os.path.join(out_dir, 'draft.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 json.dump(dict(image=os.path.abspath(a.image), size=[W, H], mmPerPx=s, scale_from=how, scale_check=check,
                outline_px=[X0, Y0, X1, Y1], outline_mm=[round((X1 - X0) * s), round((Y1 - Y0) * s)],
-               segments_px=segs, gaps_px=gaps), open(os.path.join(out_dir, 'analysis.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+               bearing_by=bearing_by, bearing_threshold=thr, segments_px=segs, gaps_px=gaps, dims_px=dims_px), open(os.path.join(out_dir, 'analysis.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 Image.fromarray(mask).save(os.path.join(out_dir, 'mask.png'))
 
 # 6. 核对图：原图淡化 + 墙段/断口编号 + 像素标尺
@@ -220,11 +302,18 @@ for x in range(0, W, 50):
 for y in range(0, H, 50):
     d.line([(0, y), (6 if y % 100 else 12, y)], fill=(0, 120, 255)); y % 100 == 0 and d.text((14, y - 6), str(y), fill=(0, 120, 255), font=font)
 d.rectangle([X0, Y0, X1, Y1], outline=(0, 160, 0))
+for key, lines in dims_px.items():
+    for k, dl in enumerate(lines):
+        for j, t in enumerate(dl['ticks']):
+            P = (t, dl['at']) if key in ('top', 'bottom') else (dl['at'], t)
+            d.ellipse([P[0] - 3, P[1] - 3, P[0] + 3, P[1] + 3], outline=(200, 0, 160), width=2)
+            lab = f"{key[0].upper()}{k}.{j}"
+            d.text((P[0] + 3, P[1] + (4 if key in ('top', 'bottom') else -12)), lab, fill=(200, 0, 160), font=font)
 for i, q in enumerate(segs):
     col = (220, 30, 30) if q['dark'] else (240, 130, 0)
     if q['orient'] == 'h': d.line([(q['s0'], q['line']), (q['s1'], q['line'])], fill=col, width=2); c = ((q['s0'] + q['s1']) / 2, q['line'] - 12)
     else: d.line([(q['line'], q['s0']), (q['line'], q['s1'])], fill=col, width=2); c = (q['line'] + 3, (q['s0'] + q['s1']) / 2)
-    d.text(c, f'W{i}', fill=col, font=font)
+    d.text(c, f"W{i}{'' if q['sure'] else '?'}", fill=col, font=font)
 for j, g in enumerate(gaps):
     col = (0, 90, 255) if g['guess'] == 'window' else (160, 0, 200)
     if g['orient'] == 'h': box = [g['s0'], g['line'] - g['t'] / 2 - 2, g['s1'], g['line'] + g['t'] / 2 + 2]
@@ -232,5 +321,7 @@ for j, g in enumerate(gaps):
     d.rectangle(box, outline=col, width=2); d.text((box[2] + 2, box[1]), f"G{j}{'win' if g['guess'] == 'window' else 'door'}", fill=col, font=font)
 vis.save(os.path.join(out_dir, 'analysis.png'))
 
+unsure = [w['id'] for w in walls if not w.get('_sure', True)]
 print(json.dumps(dict(out=out_dir, mmPerPx=round(s, 3), scale_from=how, scale_check={k: round(v, 3) for k, v in check.items()},
-                      outline_mm=[round((X1 - X0) * s), round((Y1 - Y0) * s)], walls=len(draft['walls']), gaps=len(gaps)), ensure_ascii=False))
+                      outline_mm=[round((X1 - X0) * s), round((Y1 - Y0) * s)], walls=len(draft['walls']), gaps=len(gaps),
+                      bearing_by=bearing_by, bearing_unsure=unsure, dim_lines={k: len(v) for k, v in dims_px.items()}), ensure_ascii=False))
