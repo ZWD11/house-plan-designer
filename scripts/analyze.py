@@ -1,5 +1,5 @@
 """
-户型图墙体识别：从彩色户型图（酷家乐/贝壳/房天下这类，墙体为灰色/黑色实心粗线）中
+户型图墙体识别：从彩色户型图（酷家乐/贝壳/房天下这类，墙体为灰色/黑色实心粗线）、CAD 截图 / 扫描件中
 提取水平/竖直墙段与墙上的断口（门窗候选），换算成 mm，输出 HouseSpec 初稿。
 
 用法:
@@ -19,11 +19,13 @@
 尺寸校准：自动找出图上的尺寸线和尺寸界线（短斜杠 / 竖杠），把每条尺寸线上的刻度位置
 写进 analysis.json 的 dims_px，并在 analysis.png 上标成 T/B/L/R 编号——配合 axismap.py
 按标注尺寸逐段定位墙，比整体按比例换算精确得多。
+CAD 导出的矢量 PDF、DXF 不要用这个脚本：用 cadvec.py 直接读图元坐标（精确到毫米）。
+黑底白线的 CAD 截图会自动反相；只画两条边线的墙加 --outlined。
 依赖: pip install numpy pillow opencv-python
 """
 import argparse, json, os, sys
 import numpy as np
-sys.stdout.reconfigure(encoding='utf-8')
+sys.stdout.reconfigure(encoding='utf-8'); sys.stderr.reconfigure(encoding='utf-8')
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 
@@ -39,10 +41,16 @@ ap.add_argument('--out')
 ap.add_argument('--crop', type=int, nargs=4, metavar=('X0', 'Y0', 'X1', 'Y1'), help='只在这个像素范围内找墙（排除图例、logo）')
 ap.add_argument('--outlined', action='store_true', help='隔墙画成两条细线、中间留白（贝壳等）时打开：把细线围成的墙带也识别出来')
 ap.add_argument('--bearing-max', type=int, help='承重墙颜色的最大亮度（0-255）。默认自动按颜色聚类')
+ap.add_argument('--invert', dest='invert', action='store_true', default=None, help='黑底白线的图（CAD 截图）：先反相。默认按背景亮度自动判断')
+ap.add_argument('--no-invert', dest='invert', action='store_false')
 a = ap.parse_args()
 
 img = Image.open(a.image).convert('RGB')
 rgb = np.array(img).astype(np.int16)
+# 黑底图（CAD 模型空间截图、深色主题导出）：反相成白底再识别，墙体就是深色的了
+if a.invert or (a.invert is None and np.median(rgb.max(2)) < 90):
+    rgb = 255 - rgb; img = Image.fromarray(rgb.astype(np.uint8))
+    print('检测到深色背景，已反相处理（--no-invert 关闭）', file=sys.stderr)
 H, W = rgb.shape[:2]
 mx, mn = rgb.max(2), rgb.min(2)
 
