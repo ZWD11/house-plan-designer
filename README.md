@@ -21,6 +21,7 @@
 - [实测](#实测)
 - [安装](#安装)
 - [仓库结构](#仓库结构)
+- [整栋楼（多楼层）与楼梯](#整栋楼多楼层)
 - [适用范围与局限](#适用范围与局限)
 - [开发：更新设计器模板](#开发更新设计器模板)
 
@@ -48,7 +49,9 @@
 | 彩色户型图（酷家乐、贝壳、房天下、售楼处）、手绘带尺寸的平面图 | `scripts/analyze.py` 用 OpenCV 提取墙体 + 按尺寸标注定比例 | 按标注逐段定位，通常 ≤ 10 mm |
 | 黑底 CAD 截图、扫描件、只有位图的 PDF | 同上，深色背景自动反相；墙只画双线（不填充）时 Agent 按标注手写墙 | 按标注 |
 | **CAD 导出的矢量 PDF、DXF**（原始结构图、建筑平面图、拆改图，含黑底打印） | `scripts/cadvec.py` 直接读图元坐标，不经过像素 | 墙厚、墙段、洞口和标注数字一致（≤ 1 mm） |
-| DWG | 请先在 CAD 里另存为 DXF 或打印成 PDF | — |
+| **整栋楼**：一页并排好几层平面（别墅、自建房、联排），或描边墙在交接处全断开的量房图（PDF / SVG / DXF） | `scripts/cadsplit.py` 按楼层切开、识别描边墙和门窗、各层自动对齐，输出整栋楼初稿 + 楼梯 / 电梯 / 开洞候选 | SVG / DXF 与标注一致；PDF 约 ±20 mm（受出图比例限制） |
+| **位图里并排几层**（截图、照片，每层比例可以不同）、挑高复式 / LOFT | 每层按自己的分段尺寸定比例，各层相同的尺寸链对齐到同一坐标系；`scripts/gridmm.py` 给每层叠毫米网格逐块读 | 按标注 |
+| DWG | 请先另存为 DXF，或用看图软件导出 SVG / 打印成 PDF | — |
 
 CAD 路线按国标 GB/T 50001 / 50104 和装修图惯例理解画法：涂黑 = 钢筋混凝土 / 承重，砖纹填充 = 新砌墙，两条线 = 隔墙，3~4 条平行线 = 窗，开启弧线 = 平开门（弧心定门轴、弧侧定开向），错开两扇 = 推拉门，空断口 = 门洞，彩色框 = 新开洞口，⊠ = 烟道 / 管井，⊕ = 地漏，45° 斜杠 = 尺寸起止符号。
 DXF 还按图层名（WALL / 墙、WINDOW / 窗、DOOR / 门、AXIS / 轴、DIM / 尺寸；家具、洁具、图框、标题栏层排除）、门窗编号（M0921、C1515）、房间名文字、DIMENSION 标注对象识别，中文 `\U+XXXX` 转义也能读。详见 [`reference/cad-conventions.md`](reference/cad-conventions.md)。
@@ -70,6 +73,7 @@ DXF 还按图层名（WALL / 墙、WINDOW / 窗、DOOR / 门、AXIS / 轴、DIM 
 - 画墙、拆墙、改门窗，面积实时重算；墙体转角 / 丁字口按相交墙厚度精确接合，房间面积按墙面精确计算
 - 外围三道尺寸、每段墙净长、房间开间 × 进深，改墙后实时重算；左侧可显示原图底图对照
 - 门窗 12 种：单开、双开、子母、推拉、折叠、隐形推拉门、门洞；平开、推拉、落地（带护栏）、高窗、飘窗
+- 薄墙在直线上接厚墙（隔墙接承重墙、外墙段变薄）时自动让墙面齐平，不会两边各错开半个厚度差；露台女儿墙、楼梯栏板只砌到栏板高
 
 **家具与定制**
 - 家具家电库 130+ 件：各种床、沙发（U 形 / 弧形 / L 形）、餐桌卡座、酒柜展示柜、卫浴洁具、空调热水器油烟机洗碗机、窗帘绿植、健身宠物用品……
@@ -89,7 +93,7 @@ DXF 还按图层名（WALL / 墙、WINDOW / 窗、DOOR / 门、AXIS / 轴、DIM 
 - 布置 / 水电 / 顶面 / 铺装 / 拆改五种图层；墙顶地材质、吊顶、踢脚线、立面图
 - 自定义铺砖：砖的长宽、灰缝、8 种铺法、6 种纹理、起铺点，一块块铺，报价按整砖 + 切砖片数算
 - 水电点位 28 种，一键布置水电（主灯门边开关、床头双控、电视墙和橱柜插座、冷热水、排水、燃气、空调孔、强弱电箱）
-- 方案检查：家具重叠、挡门、通道太窄、马桶离下水口太远、家电附近缺插座或水点、吊柜挡窗等
+- 方案检查：家具重叠、挡门、通道太窄、马桶离下水口太远、家电附近缺插座或水点、吊柜挡窗、楼梯着地端 / 到达端 / 头顶净高等
 - 自动算量报价；导出整套 A3 施工图 PDF、**CAD 图纸 DXF**、彩平图 PNG、分享文件；多方案管理与对比，自动保存
 
 ## 导出 CAD 图纸（DXF）
@@ -122,8 +126,9 @@ AutoCAD、天正、中望、浩辰和常见看图软件都能直接打开；按 
 | 天正 DXF（图层、门弧、填充、标注） | DXF | 往返 16 / 16 个洞口，墙体 0 误差 |
 | 设计器导出的 DXF 再读回 | DXF R2007 | 34 / 34 面墙、16 / 16 个门窗，71 段标注对象读回 69 段 |
 | 二层平面图、四室两卫 | 黑底 CAD 截图（墙为双线） | 按标注逐段写墙，外围四道总尺寸和分段与标注一致；图纸自身前后矛盾的标注逐条列出 |
+| 挑高复式（一张图左一层右二层，两层比例不同） | 装修平面图截图 | 两层按相同尺寸链对齐；数出 30 级踏步 → 一层挑高 4.98 m、四跑三拐角楼梯（三处扇形转角踏步），两层平面与原图一致；漫游从起步走到二层过厅、从梯段底下进主卧门全部走通 |
 
-完整示例：[`reference/example-spec.json`](reference/example-spec.json)（户型描述）、[`reference/example-gen.py`](reference/example-gen.py)（图片路线生成脚本）、[`reference/example-gen-precise.py`](reference/example-gen-precise.py)（按标注精确定位）、[`reference/example-gen-cad.py`](reference/example-gen-cad.py)（CAD 路线：读入 draft.json 再补改）。
+完整示例：[`reference/example-spec.json`](reference/example-spec.json)（户型描述）、[`reference/example-gen.py`](reference/example-gen.py)（图片路线生成脚本）、[`reference/example-gen-precise.py`](reference/example-gen-precise.py)（按标注精确定位）、[`reference/example-gen-cad.py`](reference/example-gen-cad.py)（CAD 路线：读入 draft.json 再补改）、[`reference/example-gen-building.py`](reference/example-gen-building.py)（整栋楼）、[`reference/example-gen-duplex.py`](reference/example-gen-duplex.py)（挑高复式、多跑楼梯）+ [`reference/example-walk-route.json`](reference/example-walk-route.json)（漫游走查路线）。
 
 ## 安装
 
@@ -152,18 +157,36 @@ assets/template.html             设计器模板（单文件，three.js 已内�
 scripts/analyze.py               图片识别墙体 → 比例 + 尺寸线刻度 + HouseSpec 初稿
 scripts/axismap.py               按尺寸标注把像素换成毫米（逐段，不用整体比例）
 scripts/cadvec.py                CAD 矢量 PDF / DXF 识别 → 按标注定坐标的 HouseSpec 初稿
+scripts/cadsplit.py              整栋楼 / 描边墙：一页多层自动切分 + 识别 + 各层对齐 → building_draft.json
 scripts/dimtext.py               没有文字层时破译尺寸数字（字形聚类 + 长度投票）
+scripts/gridmm.py                给户型图任意一块叠毫米网格并放大，按毫米直接读位置（位图多楼层用）
 scripts/build.py                 户型描述 JSON + 原图 → 设计器网页
 scripts/check.mjs                无头浏览器自查：报告 + 2D / 叠图 / 3D 截图
+scripts/walktest.mjs             漫游走查：按路线走一遍，验证楼梯、扶手、门
 scripts/dev/                     开发回归工具：
   make_test_dxf.py               把确认无误的户型画成 DXF，再用 cadvec 识别回来
   compare.py                     识别结果和标准答案逐项比对
   dumprooms.mjs                  导出每个房间的精确面积和矩形拆分，和按标注手算的面积核对
   mk_dxf_template.py             生成设计器 DXF 导出用的骨架（图层 / 线型 / 标注样式）
-reference/spec-format.md         户型描述格式（墙、门窗、房间、家具含定制参数、水电、铺砖）
+reference/spec-format.md         户型描述格式（墙、门窗、房间、家具含定制参数、水电、铺砖、整栋楼与楼梯）
 reference/cad-conventions.md     CAD 图纸画法、识别规则、核对清单、导出 DXF 的规则
-reference/example-*              完整示例
+reference/example-*              完整示例（example-gen-building.py = 整栋楼模板，example-gen-duplex.py = 挑高复式）
 ```
+
+## 整栋楼（多楼层）
+
+设计器支持任意层数：每层单独编辑，2D 各层平铺 / 单层，3D 整栋 / 平铺 / 单独看某一层（可含下层剖切），风格和配色对每种看法都生效；
+楼板开洞（楼梯井、挑空、下沉区）、家用电梯；漫游时可以走楼梯、坐电梯上下楼；报价可以全楼汇总；撤销 / 重做跨楼层。
+只有一层时和以前完全一样。户型描述格式见 `reference/spec-format.md`“整栋楼”。
+
+**楼梯**
+- 类型：U 形（双跑折返、三跑）、直跑、休息平台、**扇形转角踏步**（照图上的放射线分块，90° 拐角和 180° 掉头都行），可以拼成 L 形、多跑盘旋楼梯；直跑段可以指定踏步数
+- **读图**：按国标楼梯平面画法理解——首层只画剖切面以下的着地段、45° 折断线、以上虚线；顶层透过洞口看到整部楼梯、只标“下”；洞口里的斜线是楼板开洞，拐角的放射线是转角踏步。
+  先分清**着地端**（下层图的实线起点、“上”字）和**到达端**（上层图洞口边接上层地面、“下”字起点），再数踏步推算层高：16~19 级是普通层高，26~34 级是**挑高复式**，楼梯多跑盘旋、上一跑压在下一跑正上方，两层图看到的不是同一段梯子
+- **2D 也按这个画**：本层被剖切的梯段画折断线、以上虚线；上层洞口里自动画出下层整部楼梯并标“下”
+- **扶手**：外沿悬空的地方自动装；按高度判断有没有依靠（旁边是墙、或另一段梯段 / 平台高差在一步之内才算接上），上下叠着的两跑照样装；漫游时扶手、栏板、女儿墙都挡人，从高段梯段底下可以走过去、进出门
+- **自动检查**：最低一级离地 ≤ 一级且踩在本层地面上；最高一级 = 楼面到楼面、外侧是上层地面；梯段头顶净空 < 2 m 的地方上层必须开洞
+- `scripts/walktest.mjs` 按一条路线在漫游里把楼梯真走一遍（脚高、楼层、是否被挡），交付前验证用
 
 ## 适用范围与局限
 

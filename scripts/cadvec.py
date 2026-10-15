@@ -449,6 +449,9 @@ if T is None:
             ov = min(max(g[0], g[2]), max(q[0], q[2])) - max(min(g[0], g[2]), min(q[0], q[2]))
             if ov > dy * 4: spans[round(dy / (EPS * 50)) * EPS * 50] += ov
     T = spans.most_common(1)[0][0] if spans else span / 60
+if not T or T <= 0:
+    sys.exit('没认出墙厚：这张图可能是一页里并排好几层平面、或墙是描边画法且在交接处全部断开（量房软件导出的常见画法）。'
+             '改用 cadsplit.py（按楼层切开、描边墙识别、输出整栋楼初稿）：python cadsplit.py 图纸 --out 目录 [--ref-dim 最外道总尺寸]')
 
 def hatch_like(g):
     s = strokes[g[4]]

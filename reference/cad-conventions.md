@@ -12,6 +12,8 @@
 | DWG | 二进制，读不了 | 让用户另存为 DXF（或用 ODA File Converter 转），或打印成 PDF |
 | 扫描件 / 截图 / 只有位图的 PDF | 放大有像素 | 渲染成图片后用 `analyze.py`（黑底截图自动反相） |
 | 开发商 / 贝壳户型图 | 彩色、带家具 | `analyze.py` |
+| 一页并排好几层平面 / 量房软件导出的描边墙（墙线在每个交接处断开，柱子是方框或小图片） | cadvec 报“没认出墙厚”或墙认不全 | `cadsplit.py`（切层 + 描边墙识别 + 各层对齐；PDF 加 `--ref-dim` 最外道总尺寸） |
+| DWG 用看图软件 / 网页导出的 SVG | 真实毫米坐标、按图层分色、文字是三角面 | `cadsplit.py`（门窗图层颜色能区分门、窗） |
 
 判断 PDF：`python -c "import fitz;p=fitz.open('x.pdf')[0];print(len(p.get_drawings()), len(p.get_images()))"`，图元几千上万个 = 矢量。
 

@@ -21,9 +21,8 @@ ap.add_argument('--no-underlay', action='store_true')
 a = ap.parse_args()
 
 spec = json.load(open(a.spec, encoding='utf-8'))
-ul = spec.pop('underlay', None)
-preset = {'spec': spec}
-if ul and not a.no_underlay:
+
+def pack_underlay(ul):
     p = ul['image'] if os.path.isabs(ul['image']) else os.path.join(os.path.dirname(os.path.abspath(a.spec)), ul['image'])
     im = Image.open(p).convert('RGB')
     w, h = im.size
@@ -31,8 +30,17 @@ if ul and not a.no_underlay:
     k = min(1, 1600 / max(w, h))
     if k < 1: im = im.resize((round(w * k), round(h * k)), Image.LANCZOS)
     buf = io.BytesIO(); im.save(buf, 'JPEG', quality=85)
-    preset['underlay'] = {'src': 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode(),
-                          'imgW': im.size[0], 'imgH': im.size[1], 'mmPerPx': ul['mmPerPx'] / k, 'x': ul.get('x', 0), 'y': ul.get('y', 0)}
+    return {'src': 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode(),
+            'imgW': im.size[0], 'imgH': im.size[1], 'mmPerPx': ul['mmPerPx'] / k, 'x': ul.get('x', 0), 'y': ul.get('y', 0)}
+
+preset = {'spec': spec}
+if 'floors' in spec:
+    # 整栋楼：每层可以有自己的底图（原图里这一层的那张平面）
+    uls = [fl.pop('underlay', None) for fl in spec['floors']]
+    if any(uls) and not a.no_underlay: preset['underlays'] = [pack_underlay(u) if u else None for u in uls]
+else:
+    ul = spec.pop('underlay', None)
+    if ul and not a.no_underlay: preset['underlay'] = pack_underlay(ul)
 body = json.dumps(preset, ensure_ascii=False, separators=(',', ':'))
 preset['id'] = hashlib.sha1(body.encode()).hexdigest()[:12]  # 户型变了 id 就变，浏览器不会拿旧存档覆盖新户型
 
@@ -46,5 +54,6 @@ name = spec.get('name')
 if name: html = re.sub(r'<title>.*?</title>', f'<title>{name} · 装修设计器</title>', html, count=1, flags=re.S)
 os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 open(a.out, 'w', encoding='utf-8').write(html)
-print(json.dumps({'out': os.path.abspath(a.out), 'kb': round(len(html.encode()) / 1024), 'walls': len(spec.get('walls', [])),
-                  'rooms': len(spec.get('rooms', [])), 'underlay': 'underlay' in preset}, ensure_ascii=False))
+fl = spec.get('floors') or [spec]
+print(json.dumps({'out': os.path.abspath(a.out), 'kb': round(len(html.encode()) / 1024), 'floors': len(fl), 'walls': sum(len(f.get('walls', [])) for f in fl),
+                  'rooms': sum(len(f.get('rooms', [])) for f in fl), 'underlay': 'underlay' in preset or 'underlays' in preset}, ensure_ascii=False))
