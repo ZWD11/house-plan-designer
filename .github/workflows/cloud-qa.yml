@@ -1,7 +1,5 @@
 name: Cloud designer QA
 on:
-  push:
-    branches: [cursor/chrome-angle-backend-8664]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -28,6 +26,12 @@ jobs:
         id: chrome
         with:
           chrome-version: stable
+      - name: Configure Chrome sandbox
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          sudo chown root:root "$(dirname "$CHROME_PATH")/chrome-sandbox"
+          sudo chmod 4755 "$(dirname "$CHROME_PATH")/chrome-sandbox"
       - name: Dependencies
         run: |
           npm ci --prefix scripts
@@ -54,7 +58,10 @@ jobs:
         run: node scripts/qa.mjs qa-output/designer.html qa-output/full
       - name: Validate exported files
         if: ${{ !cancelled() }}
-        run: python scripts/qa_files.py qa-output/full/downloads
+        run: |
+          test -f qa-output/full/report.json
+          test -n "$(find qa-output/full/downloads -type f -print -quit)"
+          python scripts/qa_files.py qa-output/full/downloads
       - name: Upload reports and screenshots
         if: always()
         uses: actions/upload-artifact@v4
