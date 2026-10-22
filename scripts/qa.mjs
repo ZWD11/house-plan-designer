@@ -1,20 +1,19 @@
-// 交付前全功能验收：真显卡打开生成的设计器，把每个按钮、工具、图层、面板、弹窗、导出都实际操作一遍，
+// 交付前全功能验收：按平台选显卡后端打开生成的设计器（见 chrome.mjs），把每个按钮、工具、图层、面板、弹窗、导出都实际操作一遍，
 // 检查：页面报错、界面上出现 NaN / undefined、操作后状态有没有真的变、导出的文件能不能打开（另由 qa_files.py 校验）。
-// 用法：node scripts/qa.mjs <设计器.html> <输出目录> [--quick]
+// 用法：node scripts/qa.mjs <设计器.html> <输出目录> [--quick] [--angle=后端]
 // 输出：<输出目录>/report.md（每项 通过 / 失败 + 原因）、shots/*.png（每一步截图，人工过一遍）、downloads/（导出的文件）
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
+import { launchChrome } from './chrome.mjs';
 
 const [, , FILE, OUTARG, ...flags] = process.argv;
-if (!FILE || !OUTARG) { console.log('用法：node qa.mjs <设计器.html> <输出目录> [--quick]'); process.exit(1); }
+if (!FILE || !OUTARG) { console.log('用法：node qa.mjs <设计器.html> <输出目录> [--quick] [--angle=后端]'); process.exit(1); }
 const QUICK = flags.includes('--quick');
 const OUT = path.resolve(OUTARG), SHOTS = path.join(OUT, 'shots'), DL = path.join(OUT, 'downloads');
 fs.rmSync(OUT, { recursive: true, force: true }); for (const d of [SHOTS, DL]) fs.mkdirSync(d, { recursive: true });
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 900000, defaultViewport: { width: 1600, height: 960 },
-  args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const b = await launchChrome(puppeteer, { headless: 'new', protocolTimeout: 900000, viewport: { width: 1600, height: 960 } });
 const page = await b.newPage();
 const errs = [];
 page.on('pageerror', e => errs.push('pageerror: ' + e.message));

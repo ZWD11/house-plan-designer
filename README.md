@@ -197,6 +197,7 @@ AutoCAD、天正、中望、浩辰和常见看图软件都能直接打开；按 
    ```
 
 3. 本机需要有 Chrome 或 Edge（自查截图要用）。找不到时，设置环境变量 `CHROME_PATH` 指向浏览器程序。
+   无头 3D 的显卡后端按平台选：Windows 用 D3D11，macOS 用 Metal，Linux 有显卡用 Vulkan 或 OpenGL，没有就用 SwiftShader。要改的话设置 `CHROME_ANGLE`，或给 `qa.mjs` 加 `--angle=swiftshader` 这种参数。
 
 ## 仓库结构
 
@@ -211,8 +212,9 @@ scripts/dimtext.py               没有文字层时破译尺寸数字（字形�
 scripts/gridmm.py                给户型图任意一块叠毫米网格并放大，按毫米直接读位置（位图多楼层用）
 scripts/build.py                 户型描述 JSON + 原图 → 设计器网页
 scripts/check.mjs                无头浏览器自查：报告 + 2D / 叠图 / 3D 截图
+scripts/chrome.mjs               无头 Chrome 按平台选 ANGLE 显卡后端（可用 CHROME_ANGLE / --angle= 覆盖）
 scripts/walktest.mjs             漫游走查：按路线走一遍，验证楼梯、扶手、门
-scripts/qa.mjs                   交付验收：真显卡把设计器每个功能实际操作一遍，出报告 + 截图
+scripts/qa.mjs                   交付验收：按平台选显卡后端，把设计器每个功能实际操作一遍，出报告 + 截图
 scripts/qa_files.py              检查 qa.mjs 导出的文件能否正常打开
 scripts/qa_furniture.mjs         家具库逐件拍 3D，人工核对模型
 scripts/wallfit.py               按原图量每面墙的两个墙面，核对墙中线和厚度
@@ -263,15 +265,17 @@ reference/example-*              完整示例（example-gen-building.py = 整栋
 `check.mjs` 管户型对不对，`qa.mjs` 管设计器每个功能能不能用、显示对不对。SKILL.md 规定**交付前必须全部通过**：
 
 ```bash
-node scripts/qa.mjs <设计器.html> <输出目录>            # 约 20 分钟；--quick 跳过 PDF 和光线追踪（约 8 分钟）
+node scripts/qa.mjs <设计器.html> <输出目录>            # 约 20 分钟；--quick 跳过 PDF 和光线追踪（约 8 分钟）；--angle= 改显卡后端
 python scripts/qa_files.py <输出目录>/downloads        # 导出的 PNG / DXF / PDF / CSV / JSON / 分享文件能不能正常打开
 node scripts/qa_furniture.mjs <设计器.html> <输出目录>  # 改家具建模时：全部家具排成网格分块拍 3D，逐件看
 ```
 
-- 用真显卡（无头 Chrome + D3D11）打开设计器，把 2D 编辑（画墙、房间、门窗、点位、批注、测量、拆墙、家具拖动旋转复制删除、撤销重做）、属性面板（墙、门窗、房间、点位、定制橱柜 / 柜体）、5 个图层、水电 6 个视图和拖动改线、全部导出、报价、方案管理与对比、楼层、保存后刷新、3D 风格 / 配色 / 画质 / 日照 / 漫游 / 全景 / 光线追踪 / 智能中控 5 类设备，以及 4 种电脑屏幕尺寸和手机尺寸，一项项实际操作
+- 用无头 Chrome 打开设计器（Windows 用 D3D11，macOS 用 Metal，Linux 有显卡用 Vulkan / OpenGL，没有就用 SwiftShader；`CHROME_ANGLE` 或 `--angle=` 可改），把 2D 编辑（画墙、房间、门窗、点位、批注、测量、拆墙、家具拖动旋转复制删除、撤销重做）、属性面板（墙、门窗、房间、点位、定制橱柜 / 柜体）、5 个图层、水电 6 个视图和拖动改线、全部导出、报价、方案管理与对比、楼层、保存后刷新、3D 风格 / 配色 / 画质 / 日照 / 漫游 / 全景 / 光线追踪 / 智能中控 5 类设备，以及 4 种电脑屏幕尺寸和手机尺寸，一项项实际操作
 - 判失败：页面报错、界面出现 NaN / undefined、操作后状态没变、导出没下载到或打不开、3D 画面空白、按钮被挤出或重叠、夜里中控文字对比度不够、手机上平面超出屏幕
 - 输出 `report.md`（每项 ✅ / ❌ + 原因 + 截图）和每一步的截图，自动检查之外再人工过一遍截图
 - 示例户型实测：大平层四室 110 / 110、三层独栋别墅 112 / 112，导出文件 24 / 24 正常
+
+GitHub Actions 只检查 JavaScript 语法并构建公寓、三层别墅示例，不运行浏览器、3D 或导出验收。完整功能验收在本地按上述命令执行；云端构建通过不代表完整功能验收通过。
 
 ## 适用范围与局限
 

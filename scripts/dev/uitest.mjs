@@ -1,9 +1,9 @@
 // 开发用：生产版 HTML 上点“渲染出图（光线追踪）”，编译完 40 秒后点“提前结束并保存”，抓下载的文件
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
+import { launchChrome } from '../chrome.mjs';
 const [, , file, out] = process.argv;
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 1800000, defaultViewport: { width: 1700, height: 1000 }, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const b = await launchChrome(puppeteer, { headless: 'new', protocolTimeout: 1800000, viewport: { width: 1700, height: 1000 } });
 const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
 fs.mkdirSync(out, { recursive: true });
 const cdp = await p.createCDPSession(); await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: out.split('/').join(String.fromCharCode(92)) });

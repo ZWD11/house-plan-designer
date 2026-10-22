@@ -4,11 +4,11 @@ import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
+import { launchChrome } from './chrome.mjs';
 
 const [, , FILE, OUTARG] = process.argv;
 const OUT = path.resolve(OUTARG); fs.rmSync(OUT, { recursive: true, force: true }); fs.mkdirSync(OUT, { recursive: true });
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 900000, defaultViewport: { width: 1600, height: 1000 }, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+const b = await launchChrome(puppeteer, { headless: 'new', protocolTimeout: 900000, viewport: { width: 1600, height: 1000 } });
 const page = await b.newPage(); const errs = [];
 page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 await page.evaluateOnNewDocument(() => { try { for (const k of Object.keys(localStorage)) if (k.startsWith('house-designer') || k.startsWith('hd-')) localStorage.removeItem(k); } catch { } });

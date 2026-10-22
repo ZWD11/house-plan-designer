@@ -1,9 +1,9 @@
 // 开发用：同一页面连续出几张光线追踪图（第二张起着色器已编译）
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
+import { launchChrome } from '../chrome.mjs';
 const [, , url, shotsJson, out, w = '1280', h = '720', budget = '60'] = process.argv;
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 1800000, defaultViewport: { width: 1700, height: 1000 }, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const b = await launchChrome(puppeteer, { headless: 'new', protocolTimeout: 1800000, viewport: { width: 1700, height: 1000 } });
 const p = await b.newPage(); p.on('console', m => { if (m.text().startsWith('PT')) console.log(m.text()); });
 await p.goto(url, { waitUntil: 'load' }); await p.waitForFunction(() => window.__designer && window.shot, { timeout: 30000 }); await new Promise(r => setTimeout(r, 1500));
 fs.mkdirSync(out, { recursive: true });
