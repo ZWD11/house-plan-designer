@@ -1,0 +1,64 @@
+name: Cloud designer QA
+on:
+  push:
+    branches: [cursor/chrome-angle-backend-8664]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [apartment, villa]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Dependencies
+        run: |
+          npm ci --prefix scripts
+          pip install pillow numpy opencv-python-headless pymupdf ezdxf pypdf
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Build example
+        run: |
+          mkdir -p qa-output
+          if [ "${{ matrix.example }}" = villa ]; then
+            python reference/example-gen-villa.py qa-output/spec.json
+          else
+            cp reference/example-spec.json qa-output/spec.json
+          fi
+          python scripts/build.py qa-output/spec.json -o qa-output/designer.html --no-underlay
+      - name: Geometry and 3D smoke check
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: node scripts/check.mjs qa-output/designer.html qa-output/check
+      - name: Full browser acceptance
+        if: ${{ !cancelled() }}
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: node scripts/qa.mjs qa-output/designer.html qa-output/full
+      - name: Validate exported files
+        if: ${{ !cancelled() }}
+        run: python scripts/qa_files.py qa-output/full/downloads
+      - name: Upload reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: designer-qa-${{ matrix.example }}
+          path: qa-output/
+          retention-days: 14
