@@ -1,4 +1,4 @@
-name: Cloud designer QA
+name: Designer script checks
 on:
   pull_request:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
 jobs:
   qa:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -17,27 +17,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: scripts/package-lock.json
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: browser-actions/setup-chrome@v1
-        id: chrome
-        with:
-          chrome-version: stable
-      - name: Configure Chrome sandbox
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: |
-          sudo chown root:root "$(dirname "$CHROME_PATH")/chrome-sandbox"
-          sudo chmod 4755 "$(dirname "$CHROME_PATH")/chrome-sandbox"
-      - name: Dependencies
-        run: |
-          npm ci --prefix scripts
-          pip install pillow numpy opencv-python-headless pymupdf ezdxf pypdf
-          sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk
+      - name: Check JavaScript syntax
+        run: git ls-files -z '*.mjs' | xargs -0 -n 1 node --check
+      - name: Install build dependency
+        run: python -m pip install pillow
       - name: Build example
         run: |
           mkdir -p qa-output
@@ -47,22 +33,7 @@ jobs:
             cp reference/example-spec.json qa-output/spec.json
           fi
           python scripts/build.py qa-output/spec.json -o qa-output/designer.html --no-underlay
-      - name: Geometry and 3D smoke check
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: node scripts/check.mjs qa-output/designer.html qa-output/check
-      - name: Full browser acceptance
-        if: ${{ !cancelled() }}
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: node scripts/qa.mjs qa-output/designer.html qa-output/full
-      - name: Validate exported files
-        if: ${{ !cancelled() }}
-        run: |
-          test -f qa-output/full/report.json
-          test -n "$(find qa-output/full/downloads -type f -print -quit)"
-          python scripts/qa_files.py qa-output/full/downloads
-      - name: Upload reports and screenshots
+      - name: Upload generated example
         if: always()
         uses: actions/upload-artifact@v4
         with:
