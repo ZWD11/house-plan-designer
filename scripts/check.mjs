@@ -8,27 +8,15 @@ import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
+import { launchChrome } from './chrome.mjs';
 
 const [, , file, outArg] = process.argv;
 if (!file) { console.error('用法: node check.mjs 户型.html [输出目录]'); process.exit(1); }
 const out = path.resolve(outArg || path.join(path.dirname(file), path.basename(file, '.html') + '_check'));
 fs.mkdirSync(out, { recursive: true });
 
-const candidates = [
-  process.env.CHROME_PATH,
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-].filter(Boolean);
-const executablePath = candidates.find(p => fs.existsSync(p));
-if (!executablePath) { console.error('找不到 Chrome/Edge，设置环境变量 CHROME_PATH'); process.exit(1); }
-
-const browser = await puppeteer.launch({
-  executablePath, headless: true, defaultViewport: { width: 1600, height: 1000 },
-  args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--hide-scrollbars'],
+const browser = await launchChrome(puppeteer, {
+  headless: true, viewport: { width: 1600, height: 1000 }, extraArgs: ['--hide-scrollbars'],
 });
 const errors = [];
 try {

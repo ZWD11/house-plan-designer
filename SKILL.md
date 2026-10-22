@@ -258,10 +258,10 @@ python scripts/furnoverlay.py <工作目录>/spec.json --out <工作目录>/furn
 python scripts/build.py <工作目录>/spec.json -o <图片同目录>/<户型名>-装修设计器.html
 ```
 
-**交付前必须跑全功能验收，全部通过才能交付**（真显卡、无头浏览器把每个按钮、工具、图层、面板、弹窗、导出都实际操作一遍，约 15~20 分钟）：
+**交付前必须跑全功能验收，全部通过才能交付**（无头浏览器按平台选显卡后端：Windows D3D11、macOS Metal、Linux 有显卡用 Vulkan 或 OpenGL，否则 SwiftShader，`CHROME_ANGLE` 或 `--angle=` 可改；把每个按钮、工具、图层、面板、弹窗、导出都实际操作一遍，约 15~20 分钟）：
 
 ```bash
-node scripts/qa.mjs <户型名>-装修设计器.html <工作目录>/qa          # 加 --quick 跳过 PDF 和光线追踪（约 8 分钟）
+node scripts/qa.mjs <户型名>-装修设计器.html <工作目录>/qa          # 加 --quick 跳过 PDF 和光线追踪（约 8 分钟）；--angle= 改显卡后端
 python scripts/qa_files.py <工作目录>/qa/downloads                   # 导出的 PNG / DXF / PDF / CSV / JSON / 分享文件能不能正常打开
 ```
 
