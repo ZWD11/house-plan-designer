@@ -56,10 +56,15 @@ try {
       const labeled = new Set(regions.flatMap(r => r.labels.map(l => l.id)));
       const specOps = (spec?.walls || []).reduce((s, w) => s + (w.openings?.length || 0), 0);
       const issues = D.runChecks().issues;
+      // spec 里的墙在方案里找不到（被吸附 / 合并吞掉了，比如两面平行墙只差十几毫米）：取墙中点，看有没有方案墙经过
+      const NN = new Map(plan.nodes.map(n => [n.id, n]));
+      const segD = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)); return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); };
+      const wallsDropped = (spec?.walls || []).filter(w => { const m = { x: (w.a[0] + w.b[0]) / 2, y: (w.a[1] + w.b[1]) / 2 }; return !plan.walls.some(pw => pw.status !== 'removed' && segD(m, NN.get(pw.a), NN.get(pw.b)) < 30); }).map(w => [w.a, w.b]);
       return {
         name: plan.name, height: plan.height,
         walls: plan.walls.length, openings: plan.openings.length,
         openingsDropped: Math.max(0, specOps - plan.openings.length),
+        wallsDropped,
         bounds_mm: [app.geo.bounds.x, app.geo.bounds.y, app.geo.bounds.w, app.geo.bounds.h].map(Math.round),
         totalArea_m2: r1(regions.reduce((s, r) => s + r.area, 0)),
         rooms: regions.map(r => ({ name: r.labels.map(l => l.name).join(' + ') || '（未命名）', area_m2: r1(r.area), size_mm: D.roomSize?.(r) || '异形', interior: [Math.round(r.interior.x), Math.round(r.interior.y)] }))
@@ -104,7 +109,7 @@ try {
 
   const report = nFloors > 1 ? { floors: reports, errors } : { ...reports[0], errors };
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 1));
-  const brief = nFloors > 1 ? { out, floors: reports.map(r => ({ name: r.name, area: r.totalArea_m2, rooms: r.rooms.map(x => `${x.name} ${x.area_m2}㎡ ${x.size_mm}`), freeWallEnds: r.freeWallEnds, labelsOutsideRooms: r.labelsOutsideRooms, openingsDropped: r.openingsDropped, issues: r.issues })), errors, screenshots: shots } : { out, ...report, screenshots: shots };
+  const brief = nFloors > 1 ? { out, floors: reports.map(r => ({ name: r.name, area: r.totalArea_m2, rooms: r.rooms.map(x => `${x.name} ${x.area_m2}㎡ ${x.size_mm}`), freeWallEnds: r.freeWallEnds, labelsOutsideRooms: r.labelsOutsideRooms, openingsDropped: r.openingsDropped, wallsDropped: r.wallsDropped, issues: r.issues })), errors, screenshots: shots } : { out, ...report, screenshots: shots };
   console.log(JSON.stringify(brief, null, 1));
 } finally {
   await browser.close();

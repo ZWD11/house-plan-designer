@@ -55,7 +55,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `type` | 门：`door` 单开门、`double` 双开门、`unequal` 子母门（大扇 2/3，在 hinge 一端）、`sliding` 推拉门、`folding` 折叠门、`pocket` 隐形推拉门（门扇藏进 hinge 一端的墙里）、`hole` 门洞/垭口、`garage` 车库电动卷帘门（宽 2.4~6m，head 默认 2400，开门时门板卷进门头室内侧的卷帘箱）<br>窗：`window` 平开窗、`slideWindow` 推拉窗、`floorWindow` 落地窗（自带室内护栏）、`highWindow` 高窗、`bay` 飘窗（**往墙外凸出**的那种） |
+| `type` | 门：`door` 单开门、`double` 双开门、`unequal` 子母门（大扇 2/3，在 hinge 一端）、`sliding` 推拉门、`folding` 折叠门、`pocket` 隐形推拉门（门扇藏进 hinge 一端的墙里）、`hole` 门洞/垭口、`garage` 车库电动卷帘门（宽 2.4~6m，head 默认 2400，开门时门板卷进门头室内侧的卷帘箱）<br>窗：`window` 平开窗、`slideWindow` 推拉窗、`floorWindow` 落地窗（自带室内护栏）、`highWindow` 高窗、`bay` 飘窗（**往墙外凸出**的那种）<br>隔断：`glassWall` 室内玻璃隔断（固定玻璃，每 ~700 一根竖梃，默认 0/2600；户型图画法：墙的位置上一条细长条、等距分格，常见于茶室 / 书房 / 衣帽间 / 厨房） |
 | `from`, `to` | 洞口两端。**水平墙填 x 坐标，竖直墙填 y 坐标**（斜墙填到 a 点的距离）。直接用世界坐标，不用管墙的方向 |
 | `hinge` | 门轴在 `from` 端还是 `to` 端（默认 `from`）。看原图门扇那条直线连着洞口哪一端 |
 | `into` | 门往哪一侧开：填门扇扫过那一侧的任意一点，一般取门开进去的房间里的一点。不填就开向墙法线正方向 |
@@ -111,6 +111,10 @@
 | cabTall / cabBase / cabWall / cabTV | 书柜高柜 / 地柜 / 吊柜 / 悬空电视柜 | 1200×400 / 1600×600 / 1600×350 / 2400×400 |
 | desk / officeChair / bookshelf | 书桌 / 办公椅 / 书架 | 1200×600 / 600×600 / 900×350 |
 | sofa / lSofa / armchair | 三人沙发 / L 形转角沙发（贵妃位在 rot 0 时的西侧，即局部 -x 端）/ 单人沙发 | 2200×950 / 2800×1700 / 850×850 |
+| bendSofa | **异形组合沙发（曲线可调）**：图上沙发是弯的、折角的、蛇形的、带贵妃位的，一律用它照图描：`opt.path` = 座深中线的控制点 `"x,y,座深|x,y,座深|…"`（局部 mm，rot 0 时就是相对 `at` 的偏移；从没有靠背的那一头起，**靠背在走向的左手边**），平滑成曲线、两头圆角收口；`opt.open` = 起点那头不带靠背的长度（贵妃位脚踏）。`w` / `d` 写曲线外轮廓的外包框（生成脚本里算，照抄 `reference/example-gen-furnished.py` 的 `bend_sofa`：按图上家具一比一还原的完整示例），改宽深时整体等比拉伸。2D、3D（连续靠背 + 分块座垫 + 靠垫）、碰撞、通道都按曲线算 | 3200×2200 |
+| bendSofa_cornerChaise / bendSofa_roundL / bendSofa_serpentine / bendSofa_crescent | 家具库里现成的几种异形组合沙发：转角弧形沙发（带贵妃）/ 圆角 L 形沙发 / S 形蛇形沙发 / 月牙形沙发（同一种 bendSofa，自带 `opt.path`）。图上的沙发和其中一种一样时直接用这个 key（可加 `opt.flip: true` 左右镜像），不一样再用 `bendSofa` + 自己描的 `opt.path`。属性面板里能切造型、镜像、改贵妃位长度和靠背厚 | 2600×3400 / 3200×2400 / 4200×1900 / 3000×1300 |
+| curvedSofa | 弧形沙发：同一套曲线几何，按 w × d 自动生成向北拱起的圆弧（靠背在外侧） | 2600×1100 |
+| （直段拼接的组合沙发） | 图上就是几段直沙发拼的：每段一个 `sofa`，拼接处写 `opt.arms`：`left` / `right`（只留局部 -x / +x 端扶手）/ `none` | — |
 | coffeeTable / tvCabinet | 茶几 / 电视柜（含电视，3D 里可开关） | 1200×600 / 2000×400 |
 | diningTable / chair / sideboard | 餐桌 / 餐椅 / 餐边柜 | 1600×900 / 460×520 / 1600×400×2200 |
 | kitchenIsland / barStool | 中岛台 / 吧椅 | 1800×900 / 400×400 |
@@ -135,15 +139,18 @@
 | loveseat / uSofa / curvedSofa / chaise | 双人沙发 / U 形沙发 / 弧形沙发 / 贵妃椅 | 1600×900 / 3200×2000 / 2600×1100 / 1700×750 |
 | beanbag / ottoman / rockingChair / hangingChair | 懒人沙发 / 圆脚凳 / 摇椅 / 吊椅 | 900×900 / 550×550 / 700×950 / 1000×1000 |
 | roundCoffee / roundTable / longTable / booth / diningBench | 圆茶几 / 圆餐桌 / 8 人长餐桌 / 卡座 / 餐凳 | 900 / 1300 / 2400×1000 / 1800×600 / 1400×350 |
+| ovalTable / ovalCoffee | 椭圆餐桌（6~8 人，椅子围着放）/ 椭圆茶几（户型图上画成椭圆的桌子用它，别拿圆桌或长方桌代替） | 2400×1100 / 1300×800 |
 | wineCabinet / displayCabinet / consoleTable / hallCabinet | 酒柜 / 玻璃展示柜 / 玄关桌 / 玄关柜（中空） | 900×450 / 1000×400 / 1200×350 / 1200×400 |
 | fireplace / fishTank / projScreen / speaker / screenDivider | 电壁炉 / 鱼缸 / 投影幕布（挂墙）/ 落地音箱 / 屏风 | 1400×400 / 1200×450 / 2400×80 / 300×350 / 1800×40 |
 | bigPlant / smallPlant / hangingPlant / floorVase | 大型绿植 / 小盆栽 / 吊兰（吸顶）/ 落地花瓶 | 800 / 300 / 400 / 350 |
+| wallPanel | 墙面造型板：`opt.style` = `slat` 木格栅 / `flat` 平板 / `soft` 软包。床头背景墙、电视背景墙、整面护墙板都用它（户型图画法：贴墙一条细带，格栅画等距短刻度、软包 / 平板画双线），rot 让背面贴墙，d 照图上的厚度 | 2400×60×2600 |
 | wallArt / wallArt3 / wallClock | 装饰画 / 三联装饰画 / 挂钟（都挂墙） | 900×40 / 1500×40 / 400×50 |
 | roundRug / doormat / fan / radiator | 圆地毯 / 门口地垫 / 落地扇 / 暖气片 | 2000 / 900×600 / 400 / 1000×100 |
 | lCounter / freezer / trashBin / fridgeFrench | L 形橱柜（长边靠背墙，短边在左）/ 冰柜 / 垃圾桶 / 法式多门冰箱 | 2400×1800 / 1000×600 / 300 / 830×700 |
 | uCounter / cabCorner / cabShoe / cabSideboard | U 形橱柜 / L 形转角衣柜 / 中空鞋柜 / 餐边柜 | 2700×2100 / 2400×1800 / 1200×350 / 1800×400 |
 | wallToilet / squatToilet / doubleVanity / pedestalSink | 壁挂马桶 / 蹲便器 / 双盆浴室柜 / 立柱盆 | 380×550 / 450×600 / 1400×550 / 500×450 |
 | freeTub / bathShelf | 独立浴缸 / 置物架 | 1700×800 / 600×250 |
+| showerSet | 嵌入式恒温淋浴：贴墙包管台 + 三个旋钮（恒温阀 / 切换）+ 一端壁龛 + 墙上顶喷。户型图画法：卫生间墙边一条窄长框，里面**三个小圆**、一端一个带斜线翻盖的小方框，旁边常有花洒小圆和地漏 → 就是它（不是置物架、不是洗衣机）。`d` 照图上框的深度 | 900×200（h 1100） |
 | car / suv | 轿车 / SUV（车头朝家具正面 +y，倒车入库让车头朝车库内墙） | 1850×4800 / 1950×4900 |
 | evCharger | 壁挂充电桩（z 1100，自带 `socketEV` 充电桩电源） | 300×150 |
 | carport / carport2 | 车棚 单车位 / 双车位（立柱 + 阳光板顶，底下可以再放车） | 3200×5600 / 6000×5600 |
@@ -183,7 +190,11 @@
 - 开关：`switch1` 单控、`switch2` 双控、`switch3` 三开、`dimmer` 调光
 - 灯具：`light` 吸顶灯、`pendant` 吊灯、`downlight` 筒灯、`spot` 射灯、`wallLamp` 壁灯（挂墙）
 - 弱电：`weak` 弱电箱、`net` 网络、`tv` 电视、`intercom` 可视对讲、`smoke` 烟感
-- 给排水：`cold` 冷水、`hot` 热水、`waste` 墙排水；暖通燃气：`acHole` 空调孔、`freshAir` 新风口、`gas` 燃气
+- 给排水：`cold` 冷水、`hot` 热水、`waste` 墙排水、`waterIn` 进水总阀（管线排布的冷水起点，autoElec 会自动放在厨房旁管井 / 厨房冷水点旁，知道实际进户位置就手写）；暖通燃气：`acHole` 空调孔、`freshAir` 新风口、`gas` 燃气
+
+**管线排布**（强电回路、照明、网线、冷热水、排水的走线）由设计器按点位自动排，不用写；规则和依据见 `mep-rules.md`。
+想改默认走法写 `"mep": {"power": "floor" | "ceil", "water": "ceil" | "floor"}`（插座回路默认走地、给水默认走顶；照明固定走顶）。
+排水接 `shaft` 管井和 `sewer` 下水口，所以图上的管井、马桶下水口一定要放准；强电箱、弱电箱缺了对应管线就排不出来。
 
 墙上点位的 `at` 放在墙内皮上，`rot` 是面朝方向：0 朝南、180 朝北、-90 朝东、90 朝西。灯具放房间里，rot 填 0。`h` 离地高度有默认值。
 开关控制哪些灯：给灯写 `"id": "L1"`，开关写 `"links": ["L1"]`；不写 links 的开关自动关联同一房间的灯。
@@ -225,11 +236,13 @@
  "kit": {"shape": "L", "corner": "right", "depth": 600,
          "sink": {"leg": 1, "at": 1200, "w": 800, "bowls": 2},
          "hob":  {"leg": 0, "at": 1500, "w": 750, "burners": 2},
-         "wall": true, "wallH": 700, "wallD": 350, "wallZ": 1550, "hood": true,
+         "wall": true, "wallLegs": [1, 2], "wallH": 700, "wallD": 350, "wallZ": 1550, "hood": true,
          "top": "#eceae6", "thick": 40, "tall": "end", "tallW": 600, "tallH": 2200}}
 ```
 - `shape`：I / L / U；L 形 `corner` = 侧边段在左还是右。外包尺寸：I 形 `d` = 进深；L / U 形 `w` = 背墙那段长，`d` = 侧边段长度
+- 双排（平行）厨房：一排只有水槽、一排只有灶台时，各放一个 `counter`，水槽那排写 `"kit": {"hob": false}`，灶台那排写 `"kit": {"sink": false}`（不做的那样不画、不出对应水电点位；没灶台就没烟机）
 - 段 `leg`：0 = 背墙主段（`at` 从左端量），1 = 左侧段（U 形）或 L 形的侧段，2 = U 形右侧段（侧段的 `at` 从背墙往前量）
+- `wallLegs` = 哪几段做吊柜（不写 = 每段都做）；窗前那段不做，例如 U 形窗在背墙上写 `[1, 2]`
 - `at` 是水槽 / 灶台中心位置（mm），超出可用范围会自动夹回；`tall` 高柜（电器柜 / 冰箱位）放 `start` / `end` 端
 - 报价按地柜 / 吊柜 / 台面延米、高柜投影面积；一键水电按水槽、灶台的实际位置出冷热水、排水、烟机插座、燃气点
 
