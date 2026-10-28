@@ -193,12 +193,35 @@
 - 给排水：`cold` 冷水、`hot` 热水、`waste` 墙排水、`waterIn` 进水总阀（管线排布的冷水起点，autoElec 会自动放在厨房旁管井 / 厨房冷水点旁，知道实际进户位置就手写）；暖通燃气：`acHole` 空调孔、`freshAir` 新风口、`gas` 燃气
 
 **管线排布**（强电回路、照明、网线、冷热水、排水的走线）由设计器按点位自动排，不用写；规则和依据见 `mep-rules.md`。
-想改默认走法写 `"mep": {"power": "floor" | "ceil", "water": "ceil" | "floor"}`（插座回路默认走地、给水默认走顶；照明固定走顶）。
+想改默认走法写 `"mep": {"power": "floor" | "ceil", "water": "ceil" | "floor", "floorStyle": "ortho" | "direct"}`（插座回路默认走地、给水默认走顶；照明固定走顶；地面线管默认横平竖直沿墙分道，`direct` = 两点一线）。
+图纸上已经画了管线（水电图、给排水图）的，可以照图预先画进去：`"mep": {"custom": [{"sys": "cold", "pts": [[x, y], [x, y], ...], "via": "ceil", "size": "PPR De25"}]}`，
+`sys` = power / light / weak / cold / hot / drain，`via` 不写按系统默认，`circuit` 可写回路编号（S1、L2…）。两端要落在点位、箱子或别的管线上（误差 ≤ 150mm），否则设计器纠错会报“悬空”。
 排水接 `shaft` 管井和 `sewer` 下水口，所以图上的管井、马桶下水口一定要放准；强电箱、弱电箱缺了对应管线就排不出来。
 
 墙上点位的 `at` 放在墙内皮上，`rot` 是面朝方向：0 朝南、180 朝北、-90 朝东、90 朝西。灯具放房间里，rot 填 0。`h` 离地高度有默认值。
 开关控制哪些灯：给灯写 `"id": "L1"`，开关写 `"links": ["L1"]`；不写 links 的开关自动关联同一房间的灯。
 3D 里点击墙上的开关就能开关它关联的灯（双控两处都能控制，调光开关 关→暗→亮，三开 关→主灯→全开）；门、窗帘、电视、台灯/落地灯也都能点。
+
+### 家具风格 style（可选）
+
+顶层写 `"style": "modern"`：没单独写风格、也没指定颜色的沙发、单椅、床、餐椅、餐桌、茶几、书桌、衣柜、电视柜、床头柜、边柜…… 全部按这一款建模
+（换腿型、扶手、床头、柜门样式，配这个风格的木色 / 金属色 / 面料色）；单件写 `"opt": {"style": "chinese"}`。
+可选：`modern` 现代简约、`nordic` 北欧、`chinese` 新中式、`luxury` 轻奢、`japanese` 日式原木、`american` 美式、`industrial` 工业风、`cream` 奶油风、`wabi` 侘寂。
+用户说了装修风格（“新中式”“奶油风”）就写上；原图家具的样式看得出来（圈椅、罗汉床 → 新中式）也可以照着选。不写 = 默认款。
+
+### 自由模型（造型）
+
+没有成品家具对应的造型用自由模型搭：背景墙凸块、地台、吊顶造型、拱门、弧形墙、格栅、长虹玻璃隔断、台阶、圆柱、灯带……
+写成家具：`{"key": "freeBox", "at": [x, y], "w": .., "d": .., "h": .., "z": 离地, "rot": .., "color": "#..", "opt": {...}}`。key 见家具库「自由模型」：
+`freeBox` 立方体、`freeRoundBox` 圆角方块、`freePlatform` 地台、`freeWallBlock` 背景墙凸块、`freeCeilBlock` 吊顶造型块（z ≈ 层高 − 厚）、`freeCyl` 圆柱、`freeRoundStage` 圆形地台、
+`freeHalfCyl` 半圆柱、`freeTube` 圆管 / 圆环隔断、`freeSphere` 球、`freeHemi` 半球、`freeCone` 圆锥、`freePyramid` 四棱锥、`freeWedge` 楔形坡道、`freeArch` 拱门、`freeArcWall` 弧形墙、
+`freeSlats` 格栅、`freeGlassScreen` 长虹玻璃隔断、`freeSteps` 台阶、`freeTorus` 圆环灯、`freeLightBox` 灯带、`freeMirror` 镜面板、`freeVase` / `freeColumn` 旋转体、`freeExtrude` 拉伸体。
+`opt`：`shape`（换造型，见 model/freeShape.ts FREE_SHAPES）、`mat` 材质（paint 乳胶漆 / wood 木饰面 / stone 石材 / concrete 微水泥 / fabric 布艺 / leather 皮革 / metal 不锈钢 / brass 黄铜 / black 黑钛 / glass 玻璃 / frosted 长虹玻璃 / mirror 镜面 / rattan 藤编 / light 发光）、
+`op` 不透明度 0~1、`r` 圆角 mm、`t` 壁厚 mm（圆管 / 拱门 / 弧形墙 / 圆环）、`arc` 弧形墙圆心角、`n` 格栅条数 / 台阶级数、`sw` 格栅单条宽、`preset` 旋转体轮廓（vase 花瓶 / bowl / base 柱础 / baluster 宝瓶栏杆 / shade 灯罩 / column 罗马柱）、
+`rx` / `ry` 前后 / 左右倾斜角、`outline` 拉伸体轮廓（局部 mm `"x,y|x,y|..."`，中心为原点，随 w × d 缩放）、
+`floor: true` 能站上去（地台、舞台、阶梯教室每一级：漫游走上去会升高，顶面 = z + h；`freePlatform` / `freeRoundStage` / `freeSteps` 默认就是，台阶按每级算）。
+站在台上的家具（阶梯教室的桌椅、舞台上的讲台）写 `z` = 台面高度。
+原图画了异形地台 / 吊顶 / 吧台这种轮廓的，用 `freeExtrude` 照轮廓描（outline），不要拿矩形凑。自由模型不参与家具重叠、嵌墙检查（本来就贴着墙、压在家具上）。
 
 ### 指北与日照 north / site（可选）
 

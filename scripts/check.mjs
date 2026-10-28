@@ -27,15 +27,19 @@ const executablePath = candidates.find(p => fs.existsSync(p));
 if (!executablePath) { console.error('找不到 Chrome/Edge，设置环境变量 CHROME_PATH'); process.exit(1); }
 
 const browser = await puppeteer.launch({
-  executablePath, headless: true, defaultViewport: { width: 1600, height: 1000 },
+  executablePath, headless: true, timeout: 120000, protocolTimeout: 180000, defaultViewport: { width: 1600, height: 1000 },
   args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--hide-scrollbars'],
 });
 const errors = [];
 try {
   const page = await browser.newPage();
-  page.on('pageerror', e => errors.push(e.message));
+  page.setDefaultTimeout(180000);
+  console.log('browser ready');
+  page.setDefaultNavigationTimeout(180000);
+  page.on('pageerror', e => { errors.push(e.message); console.log('pageerror', e.message); });
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(pathToFileURL(path.resolve(file)).href + '?debug', { waitUntil: 'load' });
+  console.log('page loaded');
   await page.waitForFunction(() => window.__designer, { timeout: 15000 });
   await new Promise(r => setTimeout(r, 800));
 
@@ -60,10 +64,17 @@ try {
       const NN = new Map(plan.nodes.map(n => [n.id, n]));
       const segD = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)); return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); };
       const wallsDropped = (spec?.walls || []).filter(w => { const m = { x: (w.a[0] + w.b[0]) / 2, y: (w.a[1] + w.b[1]) / 2 }; return !plan.walls.some(pw => pw.status !== 'removed' && segD(m, NN.get(pw.a), NN.get(pw.b)) < 30); }).map(w => [w.a, w.b]);
+      // 方案里有、但没画到任何墙上的门窗（墙被吸附成斜的 / 太短，洞口放不下时会悄悄不画）
+      const drawn = new Set([...app.geo.active].flatMap(g => g.ops.map(q => q.o.id)));
+      const openingsHidden = plan.openings.filter(o => !drawn.has(o.id)).map(o => ({ type: o.type, wall: o.wall, name: o.name || '' }));
+      // spec 里横平竖直的墙，在方案里被端点吸附成了斜墙（两条墙线差十几毫米时常见）：放到同一条线上
+      const wallsSkewed = plan.walls.filter(w => { const a = NN.get(w.a), b = NN.get(w.b), dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y); return w.status !== 'removed' && Math.min(dx, dy) > 1 && Math.min(dx, dy) < 60 && Math.max(dx, dy) > 300; })
+        .map(w => [[NN.get(w.a).x, NN.get(w.a).y], [NN.get(w.b).x, NN.get(w.b).y]]);
       return {
         name: plan.name, height: plan.height,
         walls: plan.walls.length, openings: plan.openings.length,
-        openingsDropped: Math.max(0, specOps - plan.openings.length),
+        openingsDropped: Math.max(0, specOps - plan.openings.length) + openingsHidden.length,
+        openingsHidden, wallsSkewed,
         wallsDropped,
         bounds_mm: [app.geo.bounds.x, app.geo.bounds.y, app.geo.bounds.w, app.geo.bounds.h].map(Math.round),
         totalArea_m2: r1(regions.reduce((s, r) => s + r.area, 0)),
@@ -109,7 +120,7 @@ try {
 
   const report = nFloors > 1 ? { floors: reports, errors } : { ...reports[0], errors };
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 1));
-  const brief = nFloors > 1 ? { out, floors: reports.map(r => ({ name: r.name, area: r.totalArea_m2, rooms: r.rooms.map(x => `${x.name} ${x.area_m2}㎡ ${x.size_mm}`), freeWallEnds: r.freeWallEnds, labelsOutsideRooms: r.labelsOutsideRooms, openingsDropped: r.openingsDropped, wallsDropped: r.wallsDropped, issues: r.issues })), errors, screenshots: shots } : { out, ...report, screenshots: shots };
+  const brief = nFloors > 1 ? { out, floors: reports.map(r => ({ name: r.name, area: r.totalArea_m2, rooms: r.rooms.map(x => `${x.name} ${x.area_m2}㎡ ${x.size_mm}`), freeWallEnds: r.freeWallEnds, labelsOutsideRooms: r.labelsOutsideRooms, openingsDropped: r.openingsDropped, openingsHidden: r.openingsHidden, wallsSkewed: r.wallsSkewed, wallsDropped: r.wallsDropped, issues: r.issues })), errors, screenshots: shots } : { out, ...report, screenshots: shots };
   console.log(JSON.stringify(brief, null, 1));
 } finally {
   await browser.close();

@@ -659,7 +659,11 @@ for i, F in enumerate(floors):
             'elevator': [dict(e, rect=sr(e['rect'])) for e in F['cand']['elevator']],
             'voids': [dict(v, rect=sr(v['rect'])) for v in F['cand']['voids']]}
     if 'stair_zone' in F['cand']: cand['stair_zone'] = sr(F['cand']['stair_zone'])
-    cv2.imwrite(os.path.join(a.out, f'floor{i}.png'), F['under']); cv2.imwrite(os.path.join(a.out, f'check{i}.png'), F['chk'])
+    # imwrite silently fails on Windows paths containing Chinese characters.
+    for filename, pixels in [(f'floor{i}.png', F['under']), (f'check{i}.png', F['chk'])]:
+        ok, encoded = cv2.imencode('.png', pixels)
+        if not ok: raise RuntimeError(f'PNG encoding failed: {filename}')
+        encoded.tofile(os.path.join(a.out, filename))
     # 每层的干净 DXF（mm，对齐后的坐标；y 朝上）
     if ezdxf:
         dd = ezdxf.new('R2010'); dd.header['$INSUNITS'] = 4; ms = dd.modelspace(); bx0, by0 = F['to_origin']

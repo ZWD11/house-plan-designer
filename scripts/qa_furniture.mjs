@@ -18,9 +18,18 @@ await sleep(1500);
 // 家具库全部加进来，记下名字
 await page.evaluate(() => document.querySelector('#leftPanel .tabs [data-tab="furn"]').click()); await sleep(400);
 const COLS = 12, CELL = 2800;
-const n = await page.evaluate(async () => { for (const it of document.querySelectorAll('#leftPanel .cat > *')) it.click(); await new Promise(r => setTimeout(r, 300)); return document.querySelectorAll('#leftPanel .cat > *').length; });
-const info = await page.evaluate((COLS, CELL) => {
-  const D = __designer, p = structuredClone(D.app.plan), items = p.furniture.slice(-document.querySelectorAll('#leftPanel .cat > *').length);
+// 家具库按一级分类显示：逐个分类点开，把每一件都加进来（同一件出现在几个分类里只加一次）
+const n0 = await page.evaluate(() => __designer.app.plan.furniture.length);
+const n = await page.evaluate(async () => {
+  const seen = new Set(), cats = [...document.querySelectorAll('#leftPanel .lib-cats [data-lc]')].map(b => b.dataset.lc);
+  for (const c of cats) {
+    document.querySelector(`#leftPanel .lib-cats [data-lc="${c}"]`).click(); await new Promise(r => setTimeout(r, 120));
+    for (const it of [...document.querySelectorAll('#leftPanel .cat > *')]) { const k = it.querySelector('span')?.textContent + '|' + it.querySelector('em')?.textContent; if (seen.has(k)) continue; seen.add(k); it.click(); }
+  }
+  await new Promise(r => setTimeout(r, 300)); return seen.size;
+});
+const info = await page.evaluate((COLS, CELL, n0) => {
+  const D = __designer, p = structuredClone(D.app.plan), items = p.furniture.slice(n0);
   const rows = Math.ceil(items.length / COLS), W = COLS * CELL + 1200, H = rows * CELL + 1200;
   const w0 = p.walls[0], id = () => Math.random().toString(36).slice(2, 10);
   const N = [[0, 0], [W, 0], [W, H], [0, H]].map(([x, y]) => ({ id: id(), x, y }));
@@ -30,7 +39,7 @@ const info = await page.evaluate((COLS, CELL) => {
   p.furniture = items.map((f, i) => ({ ...f, x: 600 + (i % COLS + .5) * CELL, y: 600 + (Math.floor(i / COLS) + .5) * CELL, rot: 0 }));
   delete p.mep; p.name = '家具库验收'; D.replacePlan(p);
   return { rows, W, H, list: p.furniture.map((f, i) => ({ i, type: f.type, name: f.name, w: f.w, d: f.d, h: f.h })) };
-}, COLS, CELL);
+}, COLS, CELL, n0);
 fs.writeFileSync(path.join(OUT, 'list.json'), JSON.stringify(info.list, null, 1));
 await page.evaluate(() => { const D = __designer; D.fit2D(); D.requestDraw(); }); await sleep(800);
 await page.screenshot({ path: path.join(OUT, '2d_all.png') });
