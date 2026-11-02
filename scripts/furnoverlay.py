@@ -11,18 +11,26 @@
 """
 import argparse, json, math, os, sys
 from PIL import Image, ImageDraw, ImageFont
+from imgio import open_upright
 
 ap = argparse.ArgumentParser()
 ap.add_argument('spec'); ap.add_argument('--out', default='furncheck')
 ap.add_argument('--tiles', default='3x3'); ap.add_argument('--scale', type=float, default=2)
 ap.add_argument('--floor', type=int, default=0)
+# 双图路线：家具叠到“装修平面布置图”上看（换算用 align2.py 算出来的），墙仍按 spec
+ap.add_argument('--image', help='换一张底图（如设计图），不用 spec 里的 underlay')
+ap.add_argument('--mm-per-px', type=float); ap.add_argument('--origin', type=float, nargs=2, metavar=('X', 'Y'), help='底图左上角的户型坐标（mm）')
+ap.add_argument('--rotate', type=int, default=0, help='底图先顺时针转多少度')
 a = ap.parse_args()
 spec = json.load(open(a.spec, encoding='utf-8'))
 fl = spec['floors'][a.floor] if 'floors' in spec else spec
 ul = fl.get('underlay') or spec.get('underlay')
+if a.image:
+    if not (a.mm_per_px and a.origin): sys.exit('--image 要和 --mm-per-px、--origin 一起给（align2.py 输出里有）')
+    ul = {'image': os.path.abspath(a.image), 'mmPerPx': a.mm_per_px, 'x': a.origin[0], 'y': a.origin[1], 'rotate': a.rotate}
 if not ul: sys.exit('spec 里没有 underlay，没法换算到原图像素')
 img_path = ul['image'] if os.path.isabs(ul['image']) else os.path.join(os.path.dirname(os.path.abspath(a.spec)), ul['image'])
-im = Image.open(img_path).convert('RGB')
+im = open_upright(img_path, rotate=ul.get('rotate', 0))
 S = a.scale
 im = im.resize((int(im.width * S), int(im.height * S)), Image.LANCZOS)
 d = ImageDraw.Draw(im, 'RGBA')

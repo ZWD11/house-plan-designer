@@ -6,9 +6,11 @@
 //   --only   只跑某几组：2d（编辑 / 家具库 / 管线 / 导出）、3d（鸟瞰 / 风格 / 出图 / 楼层）、walk（漫游）、smart（中控）、screen（各种屏幕尺寸 / 手机）；
 //            也可以写步骤名里的关键词，如 --only 管线,漫游
 //   --retry  只重跑上次报告里失败项所在的组（失败项常是连锁的，整组重跑最稳）
+//   --soft   强制按“无显卡慢速模式”跑（默认自动检测：WebGL 是 SwiftShader / llvmpipe 时自动进入）
+//            慢速模式：每项超时放宽 4 倍；3D / 漫游 / 中控 / 日照这类纯渲染步骤超时记“⚠ 未验证”（截图人工看），不算失败
 //   验收进程默认以“低于正常”优先级运行，电脑可以照常用；不要和视频渲染、别的验收同时跑，抢显卡会大面积超时
 // 输出：<输出目录>/report.md（每项 通过 / 失败 + 原因）、shots/*.png（每一步截图，人工过一遍）、downloads/（导出的文件）
-import puppeteer from 'puppeteer-core';
+import { launch, gpuInfo, setDownloadDir } from './browser.mjs';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -27,19 +29,22 @@ if (argOf('--retry')) {
 }
 // 低优先级：Windows 上 Chrome 子进程会继承“低于正常”，验收时电脑不卡
 try { os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { }
-const VW = LITE ? { width: 1280, height: 800 } : { width: 1600, height: 960 }, TMUL = LITE ? 2 : 1;
+const VW = LITE ? { width: 1280, height: 800 } : { width: 1600, height: 960 };
+let TMUL = LITE ? 2 : 1;
 const OUT = path.resolve(OUTARG), SHOTS = path.join(OUT, 'shots'), DL = path.join(OUT, 'downloads');
 fs.rmSync(OUT, { recursive: true, force: true }); for (const d of [SHOTS, DL]) fs.mkdirSync(d, { recursive: true });
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 900000, defaultViewport: VW,
-  args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const b = await launch({ gpu: true, headless: 'new', viewport: VW, protocolTimeout: 900000 });
 const page = await b.newPage();
 const errs = [];
 page.on('pageerror', e => errs.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error' && !/favicon|ERR_FILE_NOT_FOUND.*\.ico/.test(m.text())) errs.push('console: ' + m.text()); });
 page.on('dialog', d => d.dismiss());
-const cdp = await page.createCDPSession();
-await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: DL }).catch(() => cdp.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: DL }));
+await setDownloadDir(b, page, DL);
+// 没有显卡（云端容器、远程桌面、虚拟机）：软件渲染 3D 慢 10 倍以上，进慢速模式，纯渲染步骤超时不算失败
+const GPU = await gpuInfo(page);
+const SOFT = flags.includes('--soft') || GPU.software;
+if (SOFT) { TMUL *= 4; console.log(`没有检测到显卡（${GPU.renderer}）：慢速模式，超时放宽 4 倍，3D / 漫游 / 中控 / 日照步骤超时记“未验证”`); }
+else console.log('显卡：' + GPU.renderer);
 // 第一次打开前清掉本地保存的方案（同一会话里之后刷新不再清，用来测“保存 → 刷新还在”）
 await page.evaluateOnNewDocument(() => { try { if (sessionStorage.getItem('qa-init')) return; sessionStorage.setItem('qa-init', '1'); for (const k of Object.keys(localStorage)) if (k.startsWith('house-designer') || k.startsWith('hd-')) localStorage.removeItem(k); } catch { } });
 await page.goto(pathToFileURL(path.resolve(FILE)).href + '?debug', { waitUntil: 'load' });
@@ -86,8 +91,11 @@ async function step(name, fn, { shot = true, timeout = 120000 } = {}) {
   if (bad.length) { ok = false; msg += (msg ? '；' : '') + '界面异常文字：' + bad.slice(0, 4).join(' / '); }
   let file = '';
   if (shot) { file = `${String(++shotN).padStart(3, '0')}_${name.replace(/[\\/:*?"<>| ]+/g, '_').slice(0, 40)}.png`; try { await page.screenshot({ path: path.join(SHOTS, file) }); } catch { } }
-  results.push({ name, group: GROUP, ok, msg, ms: Date.now() - t0, shot: file });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${msg ? '  —  ' + msg : ''}`);
+  // 慢速模式：渲染类分组只因超时失败（没有页面报错、没有异常文字）= 软件渲染太慢，不是设计器坏了 → 记“未验证”，交给人工看截图
+  let unverified = false;
+  if (!ok && SOFT && ['3d', 'walk', 'smart'].includes(GROUP) && /超时|Timeout|timed out/i.test(msg) && !ne.length && !bad.length) { ok = true; unverified = true; msg = '未验证（无显卡，渲染超时，看截图）：' + msg; }
+  results.push({ name, group: GROUP, ok, unverified, msg, ms: Date.now() - t0, shot: file });
+  console.log(`${unverified ? 'SKIP' : ok ? 'PASS' : 'FAIL'}  ${name}${msg ? '  —  ' + msg : ''}`);
   return ok;
 }
 const must = (c, m) => { if (!c) throw new Error(m); };
@@ -293,8 +301,20 @@ await step('管线编辑：手画管线 / 纠错 / 一键纠错 / 删除与恢�
   await click('#toolSeg [data-tool="pipe"]'); await sleep(400); must((await st()).tool === 'pipe', '管线工具没切换');
   must(await ev(() => !!document.querySelector('#pipeSys [data-ps="weak"]')), '水电面板没有画管线的系统按钮');
   await ev(() => document.querySelector('#pipeSys [data-ps="power"]').click()); await sleep(200);
-  await focusMM(room.x, room.y, .1);
-  await clickMM(room.x - 700, room.y); await clickMM(room.x + 700, room.y); await clickMM(room.x + 700, room.y + 600); await page.keyboard.press('Enter'); await sleep(800);
+  // 起点 / 终点要离所有点位、已有管线都远（点位密的户型里，房间中心 ±700 常正好落在别的回路上，就不算悬空了）
+  const free = await ev((rx, ry) => {
+    const D = __designer, P = D.app.plan, runs = D.mep().runs, R = D.app.rooms.regions.find(q => q.labels.length && Math.hypot(q.interior.x - rx, q.interior.y - ry) < 1);
+    const dSeg = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)); return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); };
+    const clear = p => P.elec.every(e => Math.hypot(e.x - p.x, e.y - p.y) > 450) && runs.every(r => r.pts.every((q, i) => !i || dSeg(p, r.pts[i - 1], q) > 350));
+    const inR = p => { const g = D.app.rooms; return !R || g.regions.indexOf(R) === g.regions.findIndex(q => q.rects.some(t => p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h)); };
+    for (let k = 0; k < 400; k++) {
+      const a = { x: rx + (Math.random() - .5) * 3000, y: ry + (Math.random() - .5) * 3000 }, b = { x: a.x + 1400, y: a.y }, c = { x: b.x, y: b.y + 600 };
+      if ([a, b, c].every(p => inR(p) && clear(p))) return [a, b, c];
+    }
+    return [{ x: rx - 700, y: ry }, { x: rx + 700, y: ry }, { x: rx + 700, y: ry + 600 }];
+  }, room.x, room.y);
+  await focusMM(free[1].x, free[1].y, .1);
+  for (const p of free) await clickMM(p.x, p.y); await page.keyboard.press('Enter'); await sleep(800);
   const c = await ev(() => (__designer.app.plan.mep?.custom || []).length); must(c === 1, '手画管线没生成');
   must((await st()).sel === 'run', '画完没选中这段管线');
   const iss = await ev(() => __designer.mepIssues().filter(i => i.key && i.key.startsWith('U:')).length); must(iss >= 1, '悬空的手画管线没报错');
@@ -796,13 +816,14 @@ await step('手机：直接用手机尺寸打开（平面在屏幕内、抽屉�
 await page.setViewport(VW); await to3d('2d');
 
 /* ============================== 报告 ============================== */
-const fail = results.filter(r => !r.ok);
-const md = [`# 设计器验收报告：${info.name}`, '', `文件：${FILE}`, ...(ONLY ? [`只跑了：${ONLY.join('、')}（不是完整验收）`] : []), ...(LITE ? ['模式：--lite（1280×800、快速画质）'] : []), `结果：**${results.length - fail.length} / ${results.length} 通过**${fail.length ? `，${fail.length} 项失败` : ''}`, '',
+const fail = results.filter(r => !r.ok), unv = results.filter(r => r.unverified);
+const md = [`# 设计器验收报告：${info.name}`, '', `文件：${FILE}`, ...(ONLY ? [`只跑了：${ONLY.join('、')}（不是完整验收）`] : []), ...(LITE ? ['模式：--lite（1280×800、快速画质）'] : []), ...(SOFT ? [`模式：无显卡慢速模式（${GPU.renderer}）；⚠ = 渲染超时未验证，必须人工看截图`] : []),
+  `结果：**${results.length - fail.length} / ${results.length} 通过**${fail.length ? `，${fail.length} 项失败` : ''}${unv.length ? `，其中 ${unv.length} 项未验证` : ''}`, '',
   '| # | 项目 | 结果 | 说明 | 截图 |', '|---|---|---|---|---|',
-  ...results.map((r, i) => `| ${i + 1} | ${r.name} | ${r.ok ? '✅' : '❌'} | ${(r.msg || '').replace(/\|/g, '/')} | ${r.shot ? `shots/${r.shot}` : ''} |`), '',
+  ...results.map((r, i) => `| ${i + 1} | ${r.name} | ${r.unverified ? '⚠' : r.ok ? '✅' : '❌'} | ${(r.msg || '').replace(/\|/g, '/')} | ${r.shot ? `shots/${r.shot}` : ''} |`), '',
   '导出的文件在 downloads/，用 `python scripts/qa_files.py <输出目录>/downloads` 检查能不能打开。'].join('\n');
 fs.writeFileSync(path.join(OUT, 'report.md'), md);
-fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ file: FILE, results, errors: errs }, null, 1));
+fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ file: FILE, gpu: GPU, soft: SOFT, results, errors: errs }, null, 1));
 console.log(`\n${results.length - fail.length} / ${results.length} 通过` + (fail.length ? `\n失败：\n${fail.map(r => ' - ' + r.name + '：' + r.msg).join('\n')}` : ''));
 await b.close();
 process.exit(fail.length ? 2 : 0);

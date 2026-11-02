@@ -12,11 +12,12 @@
 """
 import sys
 from PIL import Image, ImageDraw, ImageFont
+from imgio import open_upright
 
 
 def grid(img, ox, oy, sx, x0, y0, x1, y1, out, k=3, sy=None):
     sy = sy or sx
-    im = Image.open(img).convert('RGB')
+    im = open_upright(img)
     px = lambda m: ox + m / sx
     py = lambda m: oy + m / sy
     cx0, cy0 = int(px(x0)), int(py(y0))

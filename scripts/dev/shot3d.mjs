@@ -1,11 +1,9 @@
 // 开发用：打开 dev 页面，按 JSON 里的机位逐张漫游截图（直接取 3D 画布）
 // node shot3d.mjs URL '[{"x":..,"y":..,"yaw":..,"pitch":..,"t":15,"name":"a"}]' 输出目录 [gpu]
-import puppeteer from 'puppeteer-core';
+import { launch } from '../browser.mjs';
 import fs from 'fs';
 const [, , url, shotsJson, out, gpu] = process.argv;
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(p => fs.existsSync(p));
-const args = gpu ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] : ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'];
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', defaultViewport: { width: 1700, height: 1000 }, args });
+const b = await launch({ gpu: !!gpu, headless: 'new', viewport: { width: 1700, height: 1000 } });
 const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 await p.goto(url, { waitUntil: 'load' }); await p.waitForFunction(() => window.__designer && window.shot, { timeout: 30000 });
 await new Promise(r => setTimeout(r, 1500));

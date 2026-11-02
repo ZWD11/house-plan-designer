@@ -17,13 +17,20 @@ def setop(type_, frm, **kw):
     o.update(kw)
 
 # 门：原图单线 = 入户门；门洞按房间功能装门
-setop('door', 4200, type='door', hinge='from', into=[2200, 4700], entry=True)   # 入户门 1035
-setop('hole', 4460, type='door', hinge='to', into=[7400, 4900])                 # 卧室门 870
-setop('hole', 1860, type='door', hinge='to', into=[2300, 8600])                 # 次卧门 850
-setop('hole', 5590, type='door', hinge='to', into=[5900, 2500])                 # 卫生间门洞 750 → 平开门
-setop('door', 8925, type='door', hinge='to', into=[8800, 9300])                 # 主卫新开门洞 750（原图黄框）
-setop('hole', 6640, type='sliding')                                             # 主卧套间入口 1195 → 推拉门
-setop('window', 5200, sill=1000, head=2300)                                     # 卫生间窗：离地 1000，高 1300
+# 入户门 1035
+setop('door', 4200, type='door', hinge='from', into=[2200, 4700], entry=True)
+# 卧室门 870
+setop('hole', 4460, type='door', hinge='to', into=[7400, 4900])
+# 次卧门 850
+setop('hole', 1860, type='door', hinge='to', into=[2300, 8600])
+# 卫生间门洞 750 → 平开门
+setop('hole', 5590, type='door', hinge='to', into=[5900, 2500])
+# 主卫新开门洞 750（原图黄框）
+setop('door', 8925, type='door', hinge='to', into=[8800, 9300])
+# 主卧套间入口 1195 → 推拉门
+setop('hole', 6640, type='sliding')
+# 卫生间窗：离地 1000，高 1300
+setop('window', 5200, sill=1000, head=2300)
 
 rooms = [(2700, 1500, '厨房'), (4000, 5600, '餐厅'), (4900, 10500, '客厅'), (5600, 2100, '卫生间'), (8300, 3800, '卧室'),
          (8600, 6700, '衣帽间'), (8500, 11500, '主卧'), (9300, 9300, '主卫'), (1500, 11000, '次卧'), (4900, 14600, '阳台')]

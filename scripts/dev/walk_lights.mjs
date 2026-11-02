@@ -1,12 +1,11 @@
 // 漫游开关灯实测（真显卡无头浏览器）：夜里 / 白天进一个房间，面朝最近的开关，
 // 截图：关灯 → 按空格（操作准星对着的开关）→ 点位标记；输出开关、灯状态、标记数量和页面报错。
 // 用法：node dev/walk_lights.mjs 设计器.html 输出目录 [房间内一点 x y] [时刻 22]
-import puppeteer from 'puppeteer-core';
+import { launch } from '../browser.mjs';
 import { pathToFileURL } from 'url';
 const [, , FILE, OUT, RX = '13600', RY = '27900', HOUR = '22'] = process.argv;
 const room = { x: +RX, y: +RY };
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', defaultViewport: { width: 1400, height: 860 },
-  args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const b = await launch({ gpu: true, headless: 'new', viewport: { width: 1400, height: 860 } });
 const page = await b.newPage(); const errs = [];
 page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 160)); });
 await page.evaluateOnNewDocument(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('house-designer')) localStorage.removeItem(k); });

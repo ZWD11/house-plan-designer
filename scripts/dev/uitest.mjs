@@ -1,12 +1,11 @@
 // 开发用：生产版 HTML 上点“渲染出图（光线追踪）”，编译完 40 秒后点“提前结束并保存”，抓下载的文件
-import puppeteer from 'puppeteer-core';
+import { launch, setDownloadDir } from '../browser.mjs';
 import fs from 'fs';
 const [, , file, out] = process.argv;
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 1800000, defaultViewport: { width: 1700, height: 1000 }, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const b = await launch({ gpu: true, headless: 'new', viewport: { width: 1700, height: 1000 }, protocolTimeout: 1800000 });
 const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
 fs.mkdirSync(out, { recursive: true });
-const cdp = await p.createCDPSession(); await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: out.split('/').join(String.fromCharCode(92)) });
+await setDownloadDir(b, p, out);
 await p.goto('file:///' + file + '?debug', { waitUntil: 'load' }); await p.waitForFunction(() => window.__designer, { timeout: 30000 }); await new Promise(r => setTimeout(r, 1500));
 const t0 = Date.now();
 await p.evaluate(async () => {

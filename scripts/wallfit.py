@@ -14,12 +14,13 @@ kind：solid = 涂黑（实心）墙，outline = 两条线描边的墙；n = 有
 import sys
 import numpy as np
 from PIL import Image
+from imgio import open_upright
 
 _cache = {}
 
 
 def _img(path):
-    if path not in _cache: _cache[path] = np.array(Image.open(path).convert('L')).astype(int)
+    if path not in _cache: _cache[path] = np.array(open_upright(path, 'L')).astype(int)
     return _cache[path]
 
 

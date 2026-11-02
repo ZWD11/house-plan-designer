@@ -8,7 +8,8 @@ S=17.654; OX,OY=250,76
 X=lambda p: round((p-OX)*S/10)*10
 Y=lambda p: round((p-OY)*S/10)*10
 P=lambda x,y:[X(x),Y(y)]
-def H(y,x0,x1,t,bearing=False,ops=()):  # horizontal wall, openings in px
+# horizontal wall, openings in px
+def H(y,x0,x1,t,bearing=False,ops=()):
     return dict(a=P(x0,y),b=P(x1,y),t=t,bearing=bearing,openings=[dict(o, **{'from':X(o.pop('f')),'to':X(o.pop('e'))}) for o in map(dict,ops)])
 def V(x,y0,y1,t,bearing=False,ops=()):
     return dict(a=P(x,y0),b=P(x,y1),t=t,bearing=bearing,openings=[dict(o, **{'from':Y(o.pop('f')),'to':Y(o.pop('e'))}) for o in map(dict,ops)])

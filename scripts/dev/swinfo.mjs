@@ -1,8 +1,8 @@
 // 第一个关联了灯的开关：它在哪个房间、它的灯在哪个房间
-import puppeteer from 'puppeteer-core';
+import { launch } from '../browser.mjs';
 import { pathToFileURL } from 'url';
 const [, , FILE] = process.argv;
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu'] });
+const b = await launch({ gpu: true, headless: 'new' });
 const page = await b.newPage();
 await page.goto(pathToFileURL(FILE).href + '?debug'); await page.waitForFunction(() => window.__designer, { timeout: 60000 });
 console.log(JSON.stringify(await page.evaluate(() => {

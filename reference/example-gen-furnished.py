@@ -1,7 +1,8 @@
 """大平层四室.jpg（四室、带保姆房的大平层）户型描述生成脚本。
 像素 → 毫米按四周分段尺寸（轴线尺寸）分段线性换算；图上的楼梯间、电梯井、电梯厅是公共部分（楼梯按用户说明画错了，不要），只还原户内。"""
 import json, sys
-sys.path.insert(0, r'<skill 目录>/scripts')  # 改成本 skill 的 scripts 目录
+# 改成本 skill 的 scripts 目录
+sys.path.insert(0, r'<skill 目录>/scripts')
 from axismap import Axis, chain
 
 X = Axis(chain([300, 509, 718, 858, 1135, 1290], [3100, 3100, 2100, 4100, 2300]),
@@ -60,7 +61,8 @@ walls = [
                           dict(type='window', f=1345, e=1462), dict(type='door', f=1462, e=1530, hinge='to', into=(1495, 1550)),
                           dict(type='door', f=1597, e=1656, hinge='from', into=(1625, 1550))]),
  # 主卫（西北角）、茶室
- V(x509, yN, y1044, E, True), V(x509, y1044, 1078, E, True),  # 主卫东墙往下多出一截（衣帽间里的墙垛）
+ # 主卫东墙往下多出一截（衣帽间里的墙垛）
+ V(x509, yN, y1044, E, True), V(x509, y1044, 1078, E, True),
  H(y1044, xW, x509, T, False, [dict(type='sliding', f=355, e=428)]),
  H(820, xW, x509, 80, False, [dict(type='door', f=383, e=428, hinge='from', into=(405, 850))]),
  H(890, 428, x509, 80), V(428, 890, y1044, 80, False, [dict(type='door', f=935, e=985, hinge='to', into=(400, 960))]),
@@ -121,7 +123,8 @@ def bend_sofa(ctrl, key='bendSofa', **k):
         a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]; L = math.hypot(b[0] - a[0], b[1] - a[1]) or 1
         nx, ny = (b[1] - a[1]) / L, -(b[0] - a[0]) / L
         out += [(x + nx * dep[i] / 2, y + ny * dep[i] / 2), (x - nx * dep[i] / 2, y - ny * dep[i] / 2)]
-        if i in (0, len(pts) - 1):  # 两头圆角往外鼓
+        # 两头圆角往外鼓
+        if i in (0, len(pts) - 1):
             sg = -1 if i == 0 else 1; r = min(160, dep[i] * .22); out.append((x - ny * sg * r, y + nx * sg * r))
     xs, ys = [q[0] for q in out], [q[1] for q in out]
     cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
@@ -189,18 +192,26 @@ furniture = [
  F('bathHeater', 1630, 1330), F('waterHeater', 1681.2, 1361, 90),
 ]
 structs = [dict(kind='drain', at=P(x, y)) for x, y in [
-    (495, 745), (323, 885),            # 主卫：浴缸旁、台盆区
-    (816, 746), (848, 811),            # 公卫：淋浴区、马桶旁
-    (1188, 612), (1173, 875),          # 保姆卫、保姆房洗衣机
-    (614, 1328), (685, 1352),          # 次卫：淋浴区、马桶间
-    (1663, 1452), (1688, 1383),        # 客卫：淋浴区、马桶旁
-    (840, 1585), (1290, 1585), (1545, 1585), (1690, 1585)]]   # 四段阳台
+    # 主卫：浴缸旁、台盆区
+    (495, 745), (323, 885),
+    # 公卫：淋浴区、马桶旁
+    (816, 746), (848, 811),
+    # 保姆卫、保姆房洗衣机
+    (1188, 612), (1173, 875),
+    # 次卫：淋浴区、马桶间
+    (614, 1328), (685, 1352),
+    # 客卫：淋浴区、马桶旁
+    (1663, 1452), (1688, 1383),
+    # 四段阳台
+    (840, 1585), (1290, 1585), (1545, 1585), (1690, 1585)]]
 import math
 for f in furniture:
-    if f['key'] in ('toilet', 'wallToilet'):  # 下水口：马桶中心往背面 45（坑距 305）
+    # 下水口：马桶中心往背面 45（坑距 305）
+    if f['key'] in ('toilet', 'wallToilet'):
         a = math.radians(f['rot']); structs.append(dict(kind='sewer', at=[r5(f['at'][0] + 45 * math.sin(a)), r5(f['at'][1] - 45 * math.cos(a))]))
 ox, oy = X(0, None), Y(0, None)
-elec = [dict(kind='socketFloor', at=P(342, 1572), rot=0)]  # 主卧角窗下的落地灯：两面都是落地窗，用地插
+# 主卧角窗下的落地灯：两面都是落地窗，用地插
+elec = [dict(kind='socketFloor', at=P(342, 1572), rot=0)]
 spec = dict(name='大平层 · 四室三厅五卫（带保姆房）', height=2900, walls=walls, rooms=rooms, furniture=furniture, structs=structs, elec=elec,
             autoElec=True, underlay=dict(image='../大平层四室.jpg', mmPerPx=round(X.scale, 4), x=round(ox), y=round(oy)))
 json.dump(spec, open(sys.argv[1] if len(sys.argv) > 1 else 'spec.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=1)

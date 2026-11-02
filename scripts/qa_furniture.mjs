@@ -1,14 +1,13 @@
 // 家具库逐件验收：在一个大空房间里把家具库所有家具排成网格（每件下面写名字），分块拍 3D 和 2D，人工逐件看模型对不对
 // 用法：node scripts/qa_furniture.mjs <设计器.html> <输出目录>
-import puppeteer from 'puppeteer-core';
+import { launch } from './browser.mjs';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
 const [, , FILE, OUTARG] = process.argv;
 const OUT = path.resolve(OUTARG); fs.rmSync(OUT, { recursive: true, force: true }); fs.mkdirSync(OUT, { recursive: true });
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome'].find(p => fs.existsSync(p));
-const b = await puppeteer.launch({ executablePath: exe, headless: 'new', protocolTimeout: 900000, defaultViewport: { width: 1600, height: 1000 }, args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
+const b = await launch({ gpu: true, headless: 'new', viewport: { width: 1600, height: 1000 }, protocolTimeout: 900000 });
 const page = await b.newPage(); const errs = [];
 page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 await page.evaluateOnNewDocument(() => { try { for (const k of Object.keys(localStorage)) if (k.startsWith('house-designer') || k.startsWith('hd-')) localStorage.removeItem(k); } catch { } });

@@ -1,11 +1,10 @@
 // 导出设计器里每个房间的矩形拆分和墙的几何（含面齐平偏移），用来逐条核对面积
-import puppeteer from 'puppeteer-core';
+import { launch } from '../browser.mjs';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 const [, , file, out] = process.argv;
-const exe = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(p => fs.existsSync(p));
-const browser = await puppeteer.launch({ executablePath: exe, headless: true, args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
+const browser = await launch({ gpu: false, headless: true });
 const page = await browser.newPage();
 await page.goto(pathToFileURL(path.resolve(file)).href + '?debug', { waitUntil: 'load' });
 await page.waitForFunction(() => window.__designer, { timeout: 15000 });

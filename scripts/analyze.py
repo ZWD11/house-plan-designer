@@ -28,6 +28,7 @@ import numpy as np
 sys.stdout.reconfigure(encoding='utf-8'); sys.stderr.reconfigure(encoding='utf-8')
 import cv2
 from PIL import Image, ImageDraw, ImageFont
+from imgio import open_upright, color_mask
 
 ap = argparse.ArgumentParser()
 ap.add_argument('image')
@@ -43,10 +44,18 @@ ap.add_argument('--outlined', action='store_true', help='隔墙画成两条细�
 ap.add_argument('--bearing-max', type=int, help='承重墙颜色的最大亮度（0-255）。默认自动按颜色聚类')
 ap.add_argument('--invert', dest='invert', action='store_true', default=None, help='黑底白线的图（CAD 截图）：先反相。默认按背景亮度自动判断')
 ap.add_argument('--no-invert', dest='invert', action='store_false')
+ap.add_argument('--wall-color', choices=['cyan', 'white', 'yellow', 'green', 'magenta', 'red', 'blue'],
+                help='黑底彩色线的 CAD 截图：墙线是哪个颜色（天正默认青色）。墙按这个颜色的双线识别，需要 --scale / --dim（先用 cadshot.py 按轴网算出 mmPerPx）')
 a = ap.parse_args()
 
-img = Image.open(a.image).convert('RGB')
+img = open_upright(a.image)
 rgb = np.array(img).astype(np.int16)
+wall_cm = None
+if a.wall_color:
+    # 黑底彩色线：按线色取墙线（反相后颜色就不对了，先取再反相）
+    if not (a.scale or a.dim): sys.exit('--wall-color 需要比例：先跑 cadshot.py 按轴网求 mmPerPx，再加 --scale')
+    wall_cm = color_mask(rgb.astype(np.uint8), a.wall_color)
+    print(f'墙线颜色 {a.wall_color}：{int(wall_cm.sum())} 个像素', file=sys.stderr)
 # 黑底图（CAD 模型空间截图、深色主题导出）：反相成白底再识别，墙体就是深色的了
 if a.invert or (a.invert is None and np.median(rgb.max(2)) < 90):
     rgb = 255 - rgb; img = Image.fromarray(rgb.astype(np.uint8))
@@ -56,6 +65,17 @@ mx, mn = rgb.max(2), rgb.min(2)
 
 # 1. 墙体掩膜：低饱和度的灰/黑像素 → 开运算去掉文字、标注线、地砖斑点 → 只留房子范围内的大块
 raw = ((mx - mn < a.sat_max) & (mx < a.gray_max)).astype(np.uint8) * 255
+if wall_cm is not None:
+    # 墙 = 同色两条平行线之间的窄带：闭运算按最大墙厚把双线填实，再按最小墙厚 / 最短墙长开运算去掉单线
+    s0 = a.scale or a.dim[2] / abs(a.dim[1] - a.dim[0])
+    # 截图里 1px 细线被 JPEG 压得断断续续：先 3×3 膨胀连起来
+    thin = cv2.dilate(wall_cm.astype(np.uint8), np.ones((3, 3), np.uint8))
+    tmax, tmin, Lmin = int(round(330 / s0)) + 2, max(2, int(round(60 / s0))), max(12, int(round(600 / s0)))
+    hb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((tmax, 1), np.uint8))
+    hb = cv2.morphologyEx(cv2.morphologyEx(hb, cv2.MORPH_OPEN, np.ones((tmin, 1), np.uint8)), cv2.MORPH_OPEN, np.ones((1, Lmin), np.uint8))
+    vb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((1, tmax), np.uint8))
+    vb = cv2.morphologyEx(cv2.morphologyEx(vb, cv2.MORPH_OPEN, np.ones((1, tmin), np.uint8)), cv2.MORPH_OPEN, np.ones((Lmin, 1), np.uint8))
+    raw = ((hb | vb) > 0).astype(np.uint8) * 255
 op = cv2.morphologyEx(raw, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 n, lab, st, _ = cv2.connectedComponentsWithStats(op, 8)
 def wall_like(k):

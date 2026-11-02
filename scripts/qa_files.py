@@ -11,6 +11,7 @@ import sys, os, json, csv, io, re
 from PIL import Image, ImageStat
 
 d = sys.argv[1]
+if os.path.isdir(os.path.join(d, 'downloads')): d = os.path.join(d, 'downloads')  # 传 qa 输出目录也行
 bad, rows = [], []
 BADTXT = re.compile(r'NaN|undefined|Infinity|\[object')
 

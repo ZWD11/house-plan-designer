@@ -1,9 +1,9 @@
 // 家具库截图：不同屏幕尺寸下左栏家具页 + 拖宽后 + 大图浏览窗口
 // 用法：node dev/libshot.mjs 设计器.html 输出目录
-import puppeteer from 'puppeteer-core';
+import { launch } from '../browser.mjs';
 import { pathToFileURL } from 'url';
 const [, , FILE, OUT] = process.argv;
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu'] });
+const b = await launch({ gpu: true, headless: 'new' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 for (const [W, H] of [[1600, 960], [1280, 720]]) {
   const page = await b.newPage(); await page.setViewport({ width: W, height: H });
