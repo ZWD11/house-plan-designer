@@ -1,5 +1,5 @@
 """
-户型图墙体识别：从彩色户型图（酷家乐/贝壳/房天下这类，墙体为灰色/黑色实心粗线）、CAD 截图 / 扫描件中
+户型图墙体识别：从彩色户型图（房产平台、家装设计平台这类，墙体为灰色/黑色实心粗线）、CAD 截图 / 扫描件中
 提取水平/竖直墙段与墙上的断口（门窗候选），换算成 mm，输出 HouseSpec 初稿。
 
 用法:
@@ -40,12 +40,12 @@ ap.add_argument('--gray-max', type=int, default=175, help='墙体像素最大亮
 ap.add_argument('--sat-max', type=int, default=22, help='墙体像素最大色差（墙是纯灰/黑）')
 ap.add_argument('--out')
 ap.add_argument('--crop', type=int, nargs=4, metavar=('X0', 'Y0', 'X1', 'Y1'), help='只在这个像素范围内找墙（排除图例、logo）')
-ap.add_argument('--outlined', action='store_true', help='隔墙画成两条细线、中间留白（贝壳等）时打开：把细线围成的墙带也识别出来')
+ap.add_argument('--outlined', action='store_true', help='隔墙画成两条细线、中间留白（不少房产平台户型图这样画）时打开：把细线围成的墙带也识别出来')
 ap.add_argument('--bearing-max', type=int, help='承重墙颜色的最大亮度（0-255）。默认自动按颜色聚类')
 ap.add_argument('--invert', dest='invert', action='store_true', default=None, help='黑底白线的图（CAD 截图）：先反相。默认按背景亮度自动判断')
 ap.add_argument('--no-invert', dest='invert', action='store_false')
 ap.add_argument('--wall-color', choices=['cyan', 'white', 'yellow', 'green', 'magenta', 'red', 'blue'],
-                help='黑底彩色线的 CAD 截图：墙线是哪个颜色（天正默认青色）。墙按这个颜色的双线识别，需要 --scale / --dim（先用 cadshot.py 按轴网算出 mmPerPx）')
+                help='黑底彩色线的 CAD 截图：墙线是哪个颜色（建筑 CAD 插件默认青色）。墙按这个颜色的双线识别，需要 --scale / --dim（先用 cadshot.py 按轴网算出 mmPerPx）')
 a = ap.parse_args()
 
 img = open_upright(a.image)

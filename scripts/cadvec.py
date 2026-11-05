@@ -2,7 +2,7 @@
 CAD 图纸（矢量 PDF / DXF）精确识别：直接读图元坐标，不靠像素识图，墙体误差 < 5mm。
 
 适用：设计院 / 装修公司 / 量房软件从 CAD 导出的 PDF（打印成 PDF、虚拟打印机都行，只要不是扫描件）、
-DXF（AutoCAD / 天正 / 浩辰“另存为 DXF”；DWG 先另存为 DXF，或用 ODA File Converter 转）。
+DXF（CAD 软件“另存为 DXF”；DWG 先另存为 DXF，或用 DWG 转 DXF 的转换工具转）。
 扫描件、截图这类位图仍然用 analyze.py。
 
 用法:

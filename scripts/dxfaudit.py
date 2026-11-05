@@ -12,7 +12,7 @@
   - walls 的 spec_walls_unmatched：模型墙面附近原图没有墙线 → 墙放偏了 / 厚度错了 / 原图根本没墙（外圈玻璃幕墙整段是洞口，属正常）
   - doors 的 MISS：原图画了门、模型这里没门洞（常见：门画在“设备 / 家具”图层、弧是折线拟合的）；EXTRA：模型有门、原图没画（电梯层门、感应门画在别的层，逐个看）
   - furn 的 MISS：原图有图形、没有任何模型家具压着（漏了）；FAKE：模型落地家具框里一根原图线都没有（编的、或放偏了）
-图层关键字按天正 / 常见装修公司图层命名，别的图可以改下面几个元组。"""
+图层关键字按建筑 CAD 插件 / 常见装修公司图层命名，别的图可以改下面几个元组。"""
 import argparse, collections, json, math, sys
 from pathlib import Path
 import numpy as np

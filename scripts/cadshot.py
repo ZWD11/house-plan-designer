@@ -47,12 +47,12 @@ COLORS = {
     'red': lit & col & ((h < 8) | (h >= 170)),
     'yellow': lit & col & (h >= 20) & (h < 35),
     'green': lit & col & (h >= 35) & (h < 70),
-    'cyan': lit & col & (h >= 70) & (h < 100),   # 天正墙线常是偏绿的青（色相 75 左右）
+    'cyan': lit & col & (h >= 70) & (h < 100),   # 建筑 CAD 插件的墙线常是偏绿的青（色相 75 左右）
     'blue': lit & col & (h >= 100) & (h < 135),
     'magenta': lit & col & (h >= 135) & (h < 170),
     'white': lit & (s <= 40),
 }
-GUESS = {'cyan': '墙 / 门窗（天正默认）', 'magenta': '洁具 / 家具 / 门窗编号', 'green': '尺寸线 / 轴号', 'yellow': '楼梯 / 填充 / 管线',
+GUESS = {'cyan': '墙 / 门窗（建筑 CAD 插件默认）', 'magenta': '洁具 / 家具 / 门窗编号', 'green': '尺寸线 / 轴号', 'yellow': '楼梯 / 填充 / 管线',
          'red': '轴线（点划线）/ 标记', 'white': '文字 / 房间名', 'blue': '设备 / 门窗'}
 colors = {k: {'px': int(m.sum()), 'guess': GUESS[k]} for k, m in COLORS.items()}
 

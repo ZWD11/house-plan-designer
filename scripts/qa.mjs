@@ -278,7 +278,7 @@ const room = await ev(() => { const r = __designer.app.rooms.regions.filter(r =>
 await step('自由模型：画轮廓生成拉伸体 / 改参数 / 改轮廓', async () => {
   await ev(() => __designer.fit2D()); await sleep(300);
   const n0 = (await st()).furn; await ev(() => { window.__qaSnap3 = JSON.stringify(__designer.app.plan); });
-  await click('#toolSeg [data-tool="free"]'); await sleep(300); must((await st()).tool === 'free', '造型工具没切换');
+  await ev(() => __designer.startSolid('freeExtrude', { h: 300, z: 0, mat: 'paint', color: '#eeeae3' })); await sleep(300); must((await st()).tool === 'free', '画轮廓工具没切换');
   await focusMM(room.x, room.y, .1);
   await clickMM(room.x - 600, room.y - 400); await clickMM(room.x + 600, room.y - 400); await clickMM(room.x + 600, room.y + 400); await clickMM(room.x - 600, room.y + 500, { shift: true });
   await page.keyboard.press('Enter'); await sleep(500);
@@ -293,6 +293,78 @@ await step('自由模型：画轮廓生成拉伸体 / 改参数 / 改轮廓', as
   await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap3)); }); await sleep(1000);
   must((await st()).furn === n0, '还原后家具数不对');
   await ev(() => __designer.setTool('select'));
+});
+// 自由造型工作台：真鼠标画矩形 → 推拉 → 挖洞部件 → 完成放进方案 → 再进工作台编辑
+await step('自由造型工作台：草图推拉 / 挖洞 / 完成 / 再编辑', async () => { try {
+  await ev(() => { window.__qaSnap4 = JSON.stringify(__designer.app.plan); });
+  const n0 = (await st()).furn;
+  await click('#toolSeg [data-tool="free"]'); must(await until(() => !!document.querySelector('.fm-wrap canvas') && !!window.__fm), '工作台没打开');
+  await sleep(600);
+  // 地面上 (−400, −300) 和 (400, 300)mm 两个角投到屏幕上点（矩形按世界坐标轴对齐，屏幕上是斜的）
+  const P = await ev(() => { const c = __fm.camera, cv = __fm.renderer.domElement, b = cv.getBoundingClientRect(); c.updateMatrixWorld();
+    const sc = (x, y, z) => { const v = new c.position.constructor(x, y, z).project(c); return { x: b.left + (v.x + 1) / 2 * b.width, y: b.top + (1 - v.y) / 2 * b.height }; };
+    return [sc(-.4, 0, -.3), sc(.4, 0, .3), sc(.4, .35, .3)]; });
+  await ev(() => __fm.setTool('rect'));
+  await page.mouse.move(P[0].x, P[0].y); await page.mouse.click(P[0].x, P[0].y); await sleep(150);
+  await page.mouse.move(P[1].x, P[1].y, { steps: 4 }); await page.mouse.click(P[1].x, P[1].y); await sleep(200);
+  await page.mouse.move(P[2].x, P[2].y, { steps: 6 }); await sleep(200); await page.mouse.click(P[2].x, P[2].y); await sleep(300);
+  const p1 = await ev(() => __fm.model.parts.map(p => ({ k: p.kind, h: p.h, sk: p.sk })));
+  must(p1.length === 1 && p1[0].k === 'extrude' && p1[0].sk.type === 'rect' && Math.abs(p1[0].sk.w - 800) < 40 && Math.abs(p1[0].sk.d - 600) < 40 && p1[0].h > 150, `画矩形推拉没生成 800×600 的实体：${JSON.stringify(p1)}`);
+  // 挖洞：在顶面上往下推的圆
+  const holed = await ev(() => { const m = __fm.model, b = m.parts[0]; m.parts.push({ id: 'qh', name: '孔', kind: 'extrude', sk: { type: 'circle', r: 60 }, h: -Math.max(20, Math.abs(b.h) / 2), pos: [b.pos[0], b.pos[1] + Math.abs(b.h), b.pos[2]], rot: b.rot.slice(), scl: [1, 1, 1], mat: 'paint', color: '#fff', op: 'sub' }); __fm.rebuild();
+    const g = __fm.scene.children.find(c => c.type === 'Group' && c.children.some(x => x.userData.part === b.id)); const mesh = g.children.find(x => x.userData.part === b.id); return mesh.geometry.getAttribute('position').count; });
+  must(holed > 40, `布尔挖洞没生效（顶点数 ${holed}）`);
+  await ev(() => __fm.addPrim('cyl')); must((await ev(() => __fm.model.parts.length)) === 3, '加圆柱没生效');
+  await click('.fm-wrap [data-a="done"]'); await sleep(600);
+  must(!(await ev(() => !!document.querySelector('.fm-wrap'))), '点完成后工作台没关');
+  const f = await ev(() => __designer.app.plan.furniture.at(-1)); must((await st()).furn === n0 + 1 && f.opt?.shape === 'model' && f.w > 50, '造型没放进方案');
+  must(await ev(() => !!document.querySelector('#frWB')), '属性面板没有“进入工作台编辑”');
+  await ev(() => document.querySelector('#frWB').click()); must(await until(() => !!document.querySelector('.fm-wrap')), '再编辑没打开工作台');
+  must((await ev(() => __fm.model.parts.length)) === 3, '再编辑时部件没带回来');
+  await click('.fm-wrap [data-a="cancel"]'); await sleep(300);
+  } finally { // 失败也要关掉工作台、还原方案，不然后面的步骤全被它挡住
+    await ev(() => { if (document.querySelector('.fm-wrap')) window.__fm?.close(); if (window.__qaSnap4) __designer.replacePlan(JSON.parse(window.__qaSnap4)); }); await sleep(800);
+  }
+});
+// 吊顶：叠级 + 灯槽灯带 + 窗帘盒 + 石膏线；顶面图层；报价
+await step('吊顶：叠级 / 悬浮 / 灯槽灯带 / 窗帘盒 / 报价', async () => {
+  await ev(() => { window.__qaSnap5 = JSON.stringify(__designer.app.plan); });
+  const r = await ev(() => {
+    const D = __designer, A = D.app, R = A.rooms.regions.filter(q => q.labels.length && q.area > 8).sort((a, b) => b.area - a.area);
+    R[0].labels.forEach(l => (l.ceil = { type: 'tray', drop: 280, edgeW: 400, drop2: 150, edgeW2: 300, cove: true, curtain: 200, cornice: true }));
+    if (R[1]) R[1].labels.forEach(l => (l.ceil = { type: 'float', drop: 220, edgeW: 150, cove: true }));
+    D.commit(); D.setLayer('ceiling');
+    return { strips: A.plan.elec.filter(e => e.auto && e.auto.startsWith('cove:')).length };
+  });
+  must(r.strips >= 2, `灯槽没自动放灯带（${r.strips} 条）`);
+  await sleep(500);
+  await click('#quoteBtn'); await sleep(800);
+  const q = await ev(() => document.querySelector('.modal')?.innerText || ''); must(/叠级/.test(q) && /灯槽/.test(q), '报价单里没有叠级吊顶 / 灯槽');
+  await closeModals();
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap5)); __designer.setLayer('layout'); }); await sleep(800);
+});
+// 灯带：沿线画 → 属性（色温 / 安装位置）
+await step('灯带：画线 / 属性', async () => {
+  await ev(() => { window.__qaSnap6 = JSON.stringify(__designer.app.plan); });
+  await ev(() => __designer.startLine('strip')); await sleep(300); must((await st()).layer === 'ceiling', '画灯带没切到顶面图层');
+  await focusMM(room.x, room.y, .1);
+  await clickMM(room.x - 700, room.y - 300); await clickMM(room.x + 700, room.y - 300); await clickMM(room.x + 700, room.y + 400);
+  await page.keyboard.press('Enter'); await sleep(500);
+  const e = await ev(() => __designer.app.plan.elec.at(-1)); must(e.kind === 'strip' && e.pts?.length >= 3, '灯带没生成');
+  must(await ev(() => !!document.querySelector('#llCct')), '灯带属性面板没出来');
+  await ev(() => { const s = document.querySelector('#llCct'); s.value = '4000'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  must((await ev(() => __designer.app.plan.elec.at(-1).cct)) === 4000, '改色温没生效');
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap6)); __designer.setTool('select'); __designer.setLayer('layout'); }); await sleep(800);
+});
+// 侧栏收起 / 展开；选中家具时家具库自动定位
+await step('侧栏收起展开 / 选中家具自动定位到家具库', async () => {
+  await ev(() => __designer.toggleSide('left')); await sleep(400); must(await ev(() => document.body.classList.contains('hide-left') && getComputedStyle(document.querySelector('#leftPanel')).display === 'none'), '左栏没收起');
+  await ev(() => __designer.toggleSide('left')); await sleep(400); must(await ev(() => !document.body.classList.contains('hide-left')), '左栏没展开');
+  await ev(() => __designer.toggleSide('right')); await sleep(300); must(await ev(() => document.body.classList.contains('hide-right')), '右栏没收起');
+  await ev(() => __designer.toggleSide('right')); await sleep(300);
+  const ok = await ev(async () => { const D = __designer, f = D.app.plan.furniture.find(q => D.CAT[q.key] && !q.opt?.zone); if (!f) return 'nofurn'; D.select(null); D.select('furn', f.id); await new Promise(r => setTimeout(r, 400)); return !!document.querySelector(`#leftPanel .lib-list .item.cur[data-key="${f.key}"]`) || f.key; });
+  must(ok === true || ok === 'nofurn', `选中家具后家具库没定位到它（${ok}）`);
+  await ev(() => __designer.select(null));
 });
 // 管线编辑：画一段 → 纠错 → 一键纠错 → 删除自动走线 → 恢复
 await step('管线编辑：手画管线 / 纠错 / 一键纠错 / 删除与恢复', async () => {
@@ -382,6 +454,7 @@ await step('拆墙：拆除 ↔ 恢复（承重墙不能拆）', async () => {
 await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); __designer.fit2D(); });
 let furn = null;
 for (const f of await ev(() => __designer.app.plan.furniture.filter(f => f.w > 500 && f.d > 400 && !/curtain|rug|carpet/.test(f.type)).slice(0, 25).map(f => ({ id: f.id, x: f.x, y: f.y, rot: f.rot })))) {
+  await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); }); await focusMM(f.x, f.y, .08); // 和后面点选时同一个缩放（缩放不同时房间名标签可能正好盖住这件家具）
   await clickMM(f.x, f.y); const sel = await ev(() => __designer.app.sel); if (sel.kind === 'furn' && sel.id === f.id) { furn = f; break; }
 }
 await ev(() => __designer.select(null));

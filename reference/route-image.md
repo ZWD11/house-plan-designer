@@ -1,6 +1,6 @@
 # 图片路线：户型图 / 截图 / 扫描件
 
-适用：酷家乐 / 贝壳 / 房天下户型图、售楼处户型图、手绘带尺寸的平面图、只有位图的 PDF（先用 `fitz` 200dpi 渲染成 PNG）。黑底 CAD 截图见文末「黑底 CAD 截图」。
+适用：房产平台 / 家装设计平台户型图、售楼处户型图、手绘带尺寸的平面图、只有位图的 PDF（先用 `fitz` 200dpi 渲染成 PNG）。黑底 CAD 截图见文末「黑底 CAD 截图」。
 
 ### 1. 读图
 
@@ -27,7 +27,7 @@ python scripts/analyze.py 户型图.jpg --total-width 12340 --total-height 11940
   这些墙在 analysis.png 上编号带 `?`、也列在输出的 `bearing_unsure` 里——**必须对照原图图例逐面确认**（图例常写“承重墙 / 非承重墙 / 新建墙”）。
   常见画法：承重墙黑色或深灰实心、斜线填充；非承重墙浅灰实心或只画两条边线；外墙一般按承重处理；厨卫的 100~120mm 薄墙基本是非承重。
   颜色分界不对时用 `--bearing-max 亮度` 手动指定（承重墙颜色的最大亮度，0~255）。
-- 隔墙只画了两条细边线、中间是白的（贝壳等常见）：加 `--outlined`，否则这些墙会漏掉。
+- 隔墙只画了两条细边线、中间是白的（房产平台户型图常见）：加 `--outlined`，否则这些墙会漏掉。
 - `analysis.json` 的 `dims_px`：每条尺寸线上的刻度（尺寸界线）像素位置，下一步精确定位墙要用。
 - `draft.json`：直接可用的 HouseSpec 初稿（墙 + 门窗候选 + 底图参数）。**识别会漏墙**，漏掉的通常是：被窗户打断的墙段、很细的隔墙、浅色玻璃隔断；门窗类型也只是猜测。
 - 墙体颜色偏浅、识别不到时调 `--gray-max 200`。图例、logo 被误识别成墙时用 `--crop x0 y0 x1 y1` 限定范围。
@@ -68,14 +68,14 @@ python scripts/analyze.py 户型图.jpg --total-width 12340 --total-height 11940
 analyze.py 默认“深色 = 墙”，黑底图整张都是深色；按线色分图层 + 轴网定位：
 
 ```bash
-python scripts/cadshot.py 截图.jpg --out <工作目录>/shot                                  # layers.png：各颜色分开，看哪个颜色是墙（天正默认青色）
+python scripts/cadshot.py 截图.jpg --out <工作目录>/shot                                  # layers.png：各颜色分开，看哪个颜色是墙（建筑 CAD 插件默认青色）
 python scripts/cadshot.py 截图.jpg --x-dims 3000 7200 3600 --y-dims <横轴之间的尺寸，从上到下> --out <工作目录>/shot
 #   自动找轴号圆圈和轴线（axes.png 编号 X0.. / Y0..），按轴线之间的尺寸算 mm/px：shot.json 的 mmPerPx、x_fit / y_fit（每段比例、最大残差）、
 #   axis_chain（生成脚本里 X = Axis(shot['axis_chain']['x'])，原点 = 第一根轴线）、dims_px（绿色尺寸线的刻度）
 python scripts/analyze.py 截图.jpg --wall-color cyan --scale <mmPerPx> --out <工作目录>/analysis   # 墙 = 青色双线之间的窄带
 ```
 
-- 线色约定（CAD 索引色）：青 = 墙 / 门窗、紫 = 洁具 / 家具 / 门窗编号、绿 = 尺寸线 / 轴号、黄 = 楼梯 / 填充、红 = 轴线、白 = 文字。JPEG 截图的细线发灰，cadshot 的饱和度门槛已经放低；天正的墙线常是偏绿的青（色相 75 左右）。
+- 线色约定（CAD 索引色）：青 = 墙 / 门窗、紫 = 洁具 / 家具 / 门窗编号、绿 = 尺寸线 / 轴号、黄 = 楼梯 / 填充、红 = 轴线、白 = 文字。JPEG 截图的细线发灰，cadshot 的饱和度门槛已经放低；建筑 CAD 插件的墙线常是偏绿的青（色相 75 左右）。
 - 实测（第三次实战黑底截图 4096×4433）：4 根竖轴 + 8 根横轴自动找到，按 3000 / 7200 / 3600 定比例 5.902 mm/px，最大残差 0.9mm；`--wall-color cyan` 认出 37 段墙（窗洞处的墙线会被当成墙，门窗按图补）。
 - 尺寸数字是位图：先用 `dimocr.py` 读（下一节），读不出的段人工读；尺寸链都填进 `dims`（见 workflow-check.md）让 check 逐刻度对账。
 

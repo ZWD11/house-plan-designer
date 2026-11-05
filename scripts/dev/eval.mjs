@@ -3,7 +3,7 @@ import { launch } from '../browser.mjs';
 import fs from 'fs';
 const [, , url, body, out] = process.argv;
 const b = await launch({ gpu: true, headless: 'new', viewport: { width: 1700, height: 1000 }, protocolTimeout: 1200000 });
-const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.text().startsWith('PT') || m.type() === 'error') console.log(m.text()); });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.text().startsWith('PT') || m.text().startsWith('INFO') || m.type() === 'error') console.log(m.text()); });
 await p.goto(url, { waitUntil: 'load' }); await p.waitForFunction(() => window.__designer, { timeout: 30000 }); await new Promise(r => setTimeout(r, 1500));
 const v = await p.evaluate(`(async () => { ${body} })()`);
 if (typeof v === 'string' && v.startsWith('data:')) { fs.writeFileSync(out, Buffer.from(v.split(',')[1], 'base64')); console.log('saved', out); } else console.log(JSON.stringify(v));

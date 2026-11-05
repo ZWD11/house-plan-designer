@@ -78,7 +78,14 @@
 - `mat` 地面材质。不填时按名字猜：卫/厨 → `bath`，车库 → `epoxy`，庭院/花园 → `paving`，阳台/露台 → `deck`，客餐厅/过道 → `tile`，主卧 → `walnut`，其余 → `oak`。
   可选值：`oak` 橡木、`walnut` 胡桃木、`herring` 人字拼、`tile` 灰白大板、`marble` 米白大理石、`cement` 微水泥、`bath` 防滑砖、`terrazzo` 水磨石、`deck` 户外木塑、`paving` 庭院石材、`grass` 草坪、`epoxy` 环氧地坪（车库）。`deck` / `paving` / `grass` 算室外（没有吊顶、不贴踢脚线）。
 - `wallMat` 墙面：`latexWhite`、`latexGrey`、`latexSage`、`latexWarm`、`wallpaper`、`wallTile`、`woodPanel`。卫生间/厨房不填时自动用 `wallTile` 和 300mm 平顶吊顶。
-- `ceil` 吊顶：`{ "type": "none" | "flat" | "edge", "drop": 250, "edgeW": 450, "cove": true }`（edge 是边吊，cove 是灯带）。
+- `ceil` 吊顶：`{ "type": "none" | "flat" | "edge" | "tray" | "float" | "alu" | "wood", "drop": 250, "edgeW": 450, "cove": true, "drop2": 150, "edgeW2": 300, "curtain": 200, "cornice": true, "color": "#f1efea" }`
+  - `flat` 平顶整体下吊；`edge` 边吊（四周 edgeW 宽一圈下吊 drop，中间原顶）；`tray` 回字形叠级（外圈 drop/edgeW，第二圈 drop2/edgeW2，中间原顶）；
+    `float` 悬浮（中间整块下吊 drop，四周 edgeW 宽一圈高 100 藏灯带）；`alu` 铝扣板集成吊顶（厨卫）；`wood` 木饰面 / 木格栅
+  - `cove: true` 做灯槽：设计器**自动沿台阶放 LED 灯带**（plan.elec 里 `kind: "strip"`、`auto: "cove:…"`），跟着吊顶尺寸自动更新、自动挂到房间开关上
+  - `curtain` 窗帘盒宽（靠窗那面墙留一条到原顶的槽，0 = 不做）；`cornice` 石膏顶角线
+  - 同一个区域有多个标签（客厅 + 餐厅 + 门厅）时，吊顶按**第一个标签**算——每个标签都写同样的 `ceil`
+- 局部吊顶造型（餐厅上方方形 / 圆形吊顶、假梁、木格栅片）放家具：`ceilZone`（画轮廓）、`ceilZoneCove`（带一圈灯带）、`ceilZoneRound`、`ceilBeamWood`、`ceilSlats`，
+  `h` = 下吊厚度，顶面自动贴在顶棚下；只在顶面图层显示和选中。
 - `skirting` 踢脚线：`none` | `wood` | `metal`。
 - `tile` 自定义铺砖（可选，写了就按砖一块块铺，覆盖 `mat` 的预设纹理；不写的字段用默认值）：
   ```json
@@ -167,6 +174,16 @@
 | grandPiano / barCounter / sauna / chandelier | 三角钢琴 / 吧台（带水槽）/ 桑拿房 / 挑空水晶大吊灯（吸顶，挂在所在层顶面） | 1550×1900 / 2400×650 / 1500 / 1200（h 1600） |
 | boiler / manifold / waterSoftener | 壁挂炉（地暖 + 热水，带燃气、冷热水）/ 地暖分集水器 / 中央软水机 | 450×350 / 800×120 / 350×450 |
 | outdoorSet / plantShelf / bike / yogaMat / catTree / petBed | 户外桌椅（带遮阳伞）/ 花架 / 动感单车 / 瑜伽垫 / 猫爬架 / 宠物窝 | 1600 / 1000×350 / 550×1100 / 610×1830 / 600 / 700×550 |
+| ductAC / linearVent / linearVentSide / linearReturn / cassetteAC | 中央空调：风管机内机（吸顶，藏吊顶内）/ 线性下出风口 / 侧出风口（边吊侧面）/ 回风口带检修口 / 天花机四面出风 | 1000×500 / 1500×150 / 1500×60 / 1200×300 / 840 |
+| vrfOutdoor / freshAirUnit / thermostat / heatPump / bufferTank / floorHeat | 多联机外机 / 新风主机（吸顶）/ 温控面板 / 空气能热泵外机 / 缓冲水箱 / 地暖盘管示意 | 940×370 / 800×600 / 86 / 1000×400 / 500 / 按房间拉大 |
+| centralPurifier / preFilter / dehumidifier | 中央净水机 / 前置过滤器 / 除湿机 | 350×300 / 180×150 / 400×300 |
+| ceilLamp / linearPendant / bubblePendant / ceilingFan | 吸顶灯（家具款）/ 线性吊灯 / 泡泡（魔豆）吊灯 / 风扇灯：都吸顶、可点亮 | 600 / 1200×80 / 900 / 1320 |
+| gardenLamp / inGround / wallWasher | 庭院灯 2.8m / 地埋灯 / 户外壁灯（可点亮） | 380 / 140 / 160×140 |
+| integratedStove / washerTower / builtinFridge / smartToilet / ledMirror / projector | 集成灶 / 洗烘套装叠放 / 嵌入式冰箱 / 智能马桶 / 智能背光浴镜（可点亮）/ 吊装投影仪 | 900×600 / 600×650 / 600×600 / 400×700 / 800×40 / 400×320 |
+| hedge / flowerBed / planterBox / palm / bamboo / rock | 绿篱 / 砖砌花坛（带花）/ 木花箱 / 棕榈 / 竹丛 / 景观石 | 2000×600 / 1600×800 / 1000×400 / 2400 / 1500×600 / 1200×800 |
+| pergola / outdoorSofa / hammock / kidsSlide / dogHouse / firePit / outdoorSink | 花架廊 / 户外藤编沙发组 / 吊床 / 儿童滑梯 / 狗屋 / 火盆 / 户外洗手池 | 3000 / 2600×2000 / 3000×1000 / 1000×2600 / 800×1000 / 1000 / 600×500 |
+| landLawn / landGravel / landPaver / landDeck / landWater / landBed | 场地块（自由轮廓，`opt.outline` 写 "x,y\|x,y…" 局部 mm）：草坪（自带草丛）/ 碎石 / 石材铺装 / 户外木平台（能站上去）/ 水景鱼池 / 花境（自带花） | 按图 |
+| freeModel | 自由造型工作台建的组合模型（`opt.model` 由工作台生成，手写 spec 一般不用） | — |
 
 挂墙、吸顶的家具（空调、热水器、油烟机、壁挂电视、浴霸、晾衣架……）和落地家具上下错开，可以叠在床、马桶、洗衣机上方，不算重叠。
 家电要放齐：每个卧室和客厅一台空调；卫生间一台热水器（电热水器挂在马桶或淋浴上方）或在厨房/阳台放燃气热水器；
@@ -192,7 +209,8 @@
 也可以手写 `elec`（和 autoElec 一起写时手写的在前，自动的不会在同一位置重复放）：
 - 强电：`socket` 五孔、`socketUSB` USB、`socketW` 防水、`socket16` 16A、`socketAC` 空调、`socketHood` 烟机、`socketFloor` 地插、`socketEV` 充电桩电源（32A 独立回路）、`panel` 强电箱
 - 开关：`switch1` 单控、`switch2` 双控、`switch3` 三开、`dimmer` 调光
-- 灯具：`light` 吸顶灯、`pendant` 吊灯、`downlight` 筒灯、`spot` 射灯、`wallLamp` 壁灯（挂墙）
+- 灯具：`light` 吸顶灯、`pendant` 吊灯、`downlight` 筒灯、`spot` 射灯、`wallLamp` 壁灯（挂墙）；
+  沿线灯具 `strip` LED 灯带、`track` 磁吸轨道灯、`linear` 嵌入式线性灯：写 `"pts": [[x, y], …]`（不用写 `at`），`"loop": true` 首尾相连，`"h"` 离地高度（0 = 贴顶；柜底 1450、踢脚 80、床底 150），`"cct": 3000` 色温，`"w"` 线性灯槽宽
 - 弱电：`weak` 弱电箱、`net` 网络、`tv` 电视、`intercom` 可视对讲、`smoke` 烟感
 - 给排水：`cold` 冷水、`hot` 热水、`waste` 墙排水、`waterIn` 进水总阀（管线排布的冷水起点，autoElec 会自动放在厨房旁管井 / 厨房冷水点旁，知道实际进户位置就手写）；暖通燃气：`acHole` 空调孔、`freshAir` 新风口、`gas` 燃气
 

@@ -1,4 +1,4 @@
-"""把一份 HouseSpec 画成“天正 / 设计院风格”的 DXF，用来回归测试 cadvec.py：
+"""把一份 HouseSpec 画成“建筑 CAD 插件 / 设计院风格”的 DXF，用来回归测试 cadvec.py：
 WALL 层（承重墙 SOLID 填充、新砌墙 ANSI31 图案、隔墙两条线）、WINDOW 层四线窗、DOOR 层门扇 + 开启弧、
 PUB_TEXT 房间名、PUB_DIM 线性标注、AXIS 点划线轴线、FURN 层家具块（应被忽略）。
 用法: python make_test_dxf.py spec.json out.dxf [--rot] [--offset X Y]"""
