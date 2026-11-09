@@ -127,3 +127,8 @@
 
 spec 里写 `"autoElec": true` 会自动放进水总阀；想指定进户位置就在 `elec` 里写 `{"kind": "waterIn", ...}`。
 `"mep": {"power": "ceil", "water": "floor", "floorStyle": "direct"}` 可改默认走法，`mep.custom` 可以预先画好管线（见 spec-format.md）。管井 `shaft`、下水口 `sewer` 要按图放准，排水就接它们。
+
+
+### 只看某几个回路
+
+水电面板的回路表里点一行 = 只看这一路（再点一次恢复全部，Ctrl / Shift 多选），其它回路的管线和点位淡显（可勾「其他回路完全隐藏」）；选中管线 / 插座 / 灯时属性栏也有「只看回路 Sx」。2D、3D 管线、导出的图片和 DXF 都按当前只看的回路出。
