@@ -2,7 +2,7 @@
 
 ## 依赖
 
-- Python 3.9+：`pip install numpy pillow opencv-python pymupdf ezdxf pypdf`（后三个给 CAD 图纸和 qa_files 用）
+- Python 3.9+：`pip install numpy pillow opencv-python scipy pymupdf ezdxf pypdf`（scipy 给 rectify.py；后三个给 CAD 图纸和 qa_files 用）
 - Node 18+：在 `scripts/` 目录 `npm install`（只装 puppeteer-core，不下载浏览器）
 - `package-lock.json` 指向官方源 `registry.npmjs.org`。国内网络慢可以临时换镜像：`npm install --registry=https://registry.npmmirror.com`（不要把镜像地址写回 lock 文件，云端代理常拒绝镜像源）
 

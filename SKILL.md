@@ -11,7 +11,7 @@ description: 把用户给的户型图（图片：房产平台 / 家装设计平�
 
 ## 环境（首次）
 
-- Python：`pip install numpy pillow opencv-python pymupdf ezdxf pypdf`；Node：在 `scripts/` 下 `npm install`（只装 puppeteer-core）。
+- Python：`pip install numpy pillow opencv-python scipy pymupdf ezdxf pypdf`（scipy 给 rectify.py 拟合透视用）；Node：在 `scripts/` 下 `npm install`（只装 puppeteer-core）。
 - Windows / macOS / Linux / 云端容器通用：浏览器由 `scripts/browser.mjs` 自动找（`CHROME_PATH` → 系统 Chrome / Edge / Chromium → Playwright 缓存），root / 容器自动 `--no-sandbox`；没有显卡时验收自动进慢速模式。细节、npm 源、无显卡怎么验收见 `reference/env-cloud.md`。
 
 ## 0. 开工前先问清（列成「待确认清单」，交付时再集中列一次）
@@ -26,7 +26,7 @@ description: 把用户给的户型图（图片：房产平台 / 家装设计平�
 
 | 输入 | 路线（读对应文件） |
 |---|---|
-| 户型图、截图、扫描件、只有位图的 PDF（`fitz` 200dpi 渲成 PNG） | `reference/route-image.md`：analyze.py + axismap 按标注定位 |
+| 户型图、截图、扫描件、只有位图的 PDF（`fitz` 200dpi 渲成 PNG） | `reference/route-image.md`：**先 rectify.py 按尺寸链拉正**（手机拍照 / 拍屏幕的透视、扫描歪斜、图本身比例不均都去掉），再 analyze.py 识别 |
 | **黑底 CAD 截图**（模型空间截屏，彩色线） | `route-image.md`「黑底 CAD 截图」：cadshot.py 分色 + 自动找轴网定比例 → `analyze.py --wall-color cyan`；尺寸数字用 `dimocr.py` 读 |
 | CAD 矢量 PDF（放大不糊，`get_drawings()` 几千个图元）、DXF | `reference/route-cad.md`：cadvec.py，尺寸按标注数字精确到 mm |
 | cadvec 报“没认出墙厚” / 墙只认一半 / 数字炸成线条 / 一页一层的多页 PDF | `route-cad.md`「兜底」：cadpair.py（按线色线宽分层、平行线配墙、灰块认柱、多页共用原点） |
@@ -48,6 +48,7 @@ CAD 画法、**平面布置图图例**（三次实战读错的 30 个符号）�
 用 Python 生成脚本写（参考 `reference/example-gen*.py`），不要手写 JSON；识别脚本出的 `draft.json` / `building_draft.json` 读进来再补改，不要重写墙。
 - 像素 → 毫米用 `axismap.Axis` 按标注定位，不要整体乘一个比例（`route-image.md`）。
 - 尺寸链全部写进 spec 的 `dims` / `expectDims`，check 自动逐刻度对账（`workflow-check.md`）。
+- 图上标了房间面积的，每个房间写 `area`（㎡），check 报「面积对不上」「房间合并」（`spec-format.md`「房间 rooms」）。
 - 承重按结构形式判断，推断的写 `bearingFrom: "inferred"`；拿不准的写 `comments`（`spec-format.md`「批注与待确认」）。
 - **生成脚本里注释一律独占一行，不用行尾注释**：用脚本替换代码时把注释插进行中间会吞掉后半行（实战里静默少过一面墙）。build.py 墙数比上次少会报 `[warn]`。
 
@@ -59,7 +60,7 @@ node scripts/check.mjs <工作目录>/check.html <工作目录>/check
 ```
 
 逐项看 `report.json`（悬空墙端、被吞的墙、斜墙、丢掉的门窗、房间面积、`dimIssues` 尺寸链超差、`dimConflicts` 图纸自相矛盾、`issues`），一定要看 `overlay.png` / `plan2d.png` / `view3d.png`。细则见 `reference/workflow-check.md`。
-**交付前固定跑三个对账**：墙体 `wallaudit.py`（全楼，玻璃 / 洞口 / 柱认错能查出）、尺寸链 `dims`、家具 `furnoverlay.py` 叠图 + 设计器自查的摆放检查（窗帘活动区、推拉门轨道、高柜挡窗）。用户说“整栋重新检查”时跑全套，不只修指出的那一处。
+**交付前固定跑五个对账**：墙体正向 `wallaudit.py`（玻璃 / 洞口 / 柱认错）、**墙体反向 `coverage.py`**（原图有、模型没有的漏墙，墙面偏位，一致度 ≥ 98%）、尺寸链 `dims`、**门开向 `doorcheck.py`**、家具 `furnoverlay.py` 叠图 + 设计器自查的摆放检查（窗帘活动区、推拉门轨道、高柜挡窗）。房间写上图上标的面积 `area`，自查逐间对账。用户说“整栋重新检查”时跑全套，不只修指出的那一处。
 用户指出某处 3D 不对时先 `node scripts/closeup.mjs 设计器.html x y 方向 out.png` 拍近景再改。
 
 ## 5. 布置家具、家电和水电（默认要做）
@@ -82,7 +83,12 @@ node scripts/elecaudit.mjs <户型名>-装修设计器.html                     
 ```
 
 - qa 全部通过（⚠ 未验证的项人工看截图）才能交付，**一定人工过一遍 `qa/shots/`**。验收参数、判定规则、不要和渲染同时跑等见 `reference/delivery.md`。
-- 交付给用户：HTML 路径 + zip（HTML、原图、生成脚本、spec、截图，用户问“怎么下载”就给它）、`plan2d.png` / `view3d.png`、**待确认清单**、三个对账结果、「图上符号 → 建模」表、和原图可能不一致的地方、比例是否估算、承重判断依据；用法说明见 `delivery.md`。
+- 交付给用户：HTML 路径 + zip（HTML、原图、生成脚本、spec、截图，用户问“怎么下载”就给它）、`plan2d.png` / `view3d.png`、**待确认清单**、五个对账结果（含 coverage 一致度）、「图上符号 → 建模」表、和原图可能不一致的地方、比例是否估算、承重判断依据；用法说明见 `delivery.md`。
+
+## 识别回归基准
+
+改了识别 / 对账脚本（analyze、rectify、wallfit、coverage、doorcheck）之后跑：
+`python scripts/bench.py --root <放 *_design 案例的目录> --out <同目录>/_bench`——用验收过的户型当标准答案，量墙召回 / 准确 / 中线误差、一致度、门弧认出率，和上次比 ↑↓。变差的不要交。
 
 ## 更新模板
 

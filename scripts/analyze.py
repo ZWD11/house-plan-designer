@@ -46,15 +46,41 @@ ap.add_argument('--invert', dest='invert', action='store_true', default=None, he
 ap.add_argument('--no-invert', dest='invert', action='store_false')
 ap.add_argument('--wall-color', choices=['cyan', 'white', 'yellow', 'green', 'magenta', 'red', 'blue'],
                 help='黑底彩色线的 CAD 截图：墙线是哪个颜色（建筑 CAD 插件默认青色）。墙按这个颜色的双线识别，需要 --scale / --dim（先用 cadshot.py 按轴网算出 mmPerPx）')
+ap.add_argument('--no-light-walls', action='store_true', help='不补浅灰色（亮度 175~215）的隔墙')
+ap.add_argument('--origin', type=float, nargs=2, metavar=('XMM', 'YMM'), help='图片左上角像素对应的毫米坐标（rectify.py 拉正后的图：照它打印的写），不写 = 原点取墙体外轮廓左上角')
 a = ap.parse_args()
 
 img = open_upright(a.image)
 rgb = np.array(img).astype(np.int16)
 wall_cm = None
+auto_cm = None
+def wall_bands(cm, s0):
+    """同色两条平行线之间的窄带 = 墙：闭运算按最大墙厚把双线填实，再按最小墙厚 / 最短墙长开运算去掉单线"""
+    # 截图里 1px 细线被 JPEG 压得断断续续：先 3×3 膨胀连起来
+    thin = cv2.dilate(cm.astype(np.uint8), np.ones((3, 3), np.uint8))
+    tmax, tmin, Lmin = int(round(330 / s0)) + 2, max(2, int(round(60 / s0))), max(12, int(round(600 / s0)))
+    hb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((tmax, 1), np.uint8))
+    hb = cv2.morphologyEx(cv2.morphologyEx(hb, cv2.MORPH_OPEN, np.ones((tmin, 1), np.uint8)), cv2.MORPH_OPEN, np.ones((1, Lmin), np.uint8))
+    vb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((1, tmax), np.uint8))
+    vb = cv2.morphologyEx(cv2.morphologyEx(vb, cv2.MORPH_OPEN, np.ones((1, tmin), np.uint8)), cv2.MORPH_OPEN, np.ones((Lmin, 1), np.uint8))
+    return (hb | vb) > 0
+# 黑底彩色线的 CAD 截图没给 --wall-color：有比例时各种线色都试一遍，双线墙带面积最大的颜色就是墙线（建筑插件多半是青色，也有白墙线 + 绿尺寸线的）
+if not a.wall_color and (a.scale or a.dim) and a.invert is not False and np.median(rgb.max(2)) < 90:
+    s_try = a.scale or a.dim[2] / abs(a.dim[1] - a.dim[0])
+    u8 = rgb.astype(np.uint8)
+    hsv_ = cv2.cvtColor(u8, cv2.COLOR_RGB2HSV)
+    # 白色只认真正亮的白线（亮度 > 150）：深蓝 / 深灰底色按 color_mask 的宽门槛会混进白色
+    cms = {c: color_mask(u8, c) for c in ('cyan', 'yellow', 'green', 'magenta', 'red', 'blue')}
+    cms['white'] = (hsv_[..., 2] > 150) & (hsv_[..., 1] <= 40)
+    areas = {c: int(wall_bands(m_, s_try).sum()) for c, m_ in cms.items()}
+    best_c = max(areas, key=areas.get)
+    if areas[best_c] > 0:
+        a.wall_color = best_c; auto_cm = cms[best_c]
+        print(f'黑底截图：按双线墙带面积自动选墙线颜色 {best_c}（各色 {areas}；不对就手动 --wall-color）', file=sys.stderr)
 if a.wall_color:
     # 黑底彩色线：按线色取墙线（反相后颜色就不对了，先取再反相）
     if not (a.scale or a.dim): sys.exit('--wall-color 需要比例：先跑 cadshot.py 按轴网求 mmPerPx，再加 --scale')
-    wall_cm = color_mask(rgb.astype(np.uint8), a.wall_color)
+    wall_cm = auto_cm if auto_cm is not None else color_mask(rgb.astype(np.uint8), a.wall_color)
     print(f'墙线颜色 {a.wall_color}：{int(wall_cm.sum())} 个像素', file=sys.stderr)
 # 黑底图（CAD 模型空间截图、深色主题导出）：反相成白底再识别，墙体就是深色的了
 if a.invert or (a.invert is None and np.median(rgb.max(2)) < 90):
@@ -66,16 +92,8 @@ mx, mn = rgb.max(2), rgb.min(2)
 # 1. 墙体掩膜：低饱和度的灰/黑像素 → 开运算去掉文字、标注线、地砖斑点 → 只留房子范围内的大块
 raw = ((mx - mn < a.sat_max) & (mx < a.gray_max)).astype(np.uint8) * 255
 if wall_cm is not None:
-    # 墙 = 同色两条平行线之间的窄带：闭运算按最大墙厚把双线填实，再按最小墙厚 / 最短墙长开运算去掉单线
     s0 = a.scale or a.dim[2] / abs(a.dim[1] - a.dim[0])
-    # 截图里 1px 细线被 JPEG 压得断断续续：先 3×3 膨胀连起来
-    thin = cv2.dilate(wall_cm.astype(np.uint8), np.ones((3, 3), np.uint8))
-    tmax, tmin, Lmin = int(round(330 / s0)) + 2, max(2, int(round(60 / s0))), max(12, int(round(600 / s0)))
-    hb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((tmax, 1), np.uint8))
-    hb = cv2.morphologyEx(cv2.morphologyEx(hb, cv2.MORPH_OPEN, np.ones((tmin, 1), np.uint8)), cv2.MORPH_OPEN, np.ones((1, Lmin), np.uint8))
-    vb = cv2.morphologyEx(thin, cv2.MORPH_CLOSE, np.ones((1, tmax), np.uint8))
-    vb = cv2.morphologyEx(cv2.morphologyEx(vb, cv2.MORPH_OPEN, np.ones((1, tmin), np.uint8)), cv2.MORPH_OPEN, np.ones((Lmin, 1), np.uint8))
-    raw = ((hb | vb) > 0).astype(np.uint8) * 255
+    raw = wall_bands(wall_cm, s0).astype(np.uint8) * 255
 op = cv2.morphologyEx(raw, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 n, lab, st, _ = cv2.connectedComponentsWithStats(op, 8)
 def wall_like(k):
@@ -89,20 +107,21 @@ if a.crop:
     comps = [k for k in comps if st[k, 0] >= cx0 and st[k, 1] >= cy0 and st[k, 0] + st[k, 2] <= cx1 and st[k, 1] + st[k, 3] <= cy1]
 if not comps:
     sys.exit('没有识别到墙体：试试调高 --gray-max 或 --sat-max')
-# 从最大块出发，把离已选范围不远的块逐个并进来（窗洞会把墙体断成很多块）
-big = max(comps, key=lambda k: st[k, 4])
-U = [st[big, 0], st[big, 1], st[big, 0] + st[big, 2], st[big, 1] + st[big, 3]]
-gap = .08 * max(W, H)
-chosen, rest = {big}, set(comps) - {big}
-grew = True
-while grew:
-    grew = False
-    for k in list(rest):
-        x, y, w, h = st[k, :4]
-        dx = max(U[0] - (x + w), x - U[2], 0); dy = max(U[1] - (y + h), y - U[3], 0)
-        if max(dx, dy) <= gap:
-            chosen.add(k); rest.discard(k); grew = True
-            U = [min(U[0], x), min(U[1], y), max(U[2], x + w), max(U[3], y + h)]
+# 把墙块按距离聚成簇（窗洞、开敞的客餐厅会把墙体断成很多块，彼此隔得可能挺远），取总面积最大的那一簇 = 房子
+# （以前是从最大一块出发只并 8% 图宽以内的块：客餐厅没有深色墙的大平层会丢掉大半个户型）
+gap = .15 * max(W, H)
+par = {k: k for k in comps}
+def _f(k):
+    while par[k] != k: par[k] = par[par[k]]; k = par[k]
+    return k
+for i1, k1 in enumerate(comps):
+    x1, y1, w1, h1 = st[k1, :4]
+    for k2 in comps[i1 + 1:]:
+        x2, y2, w2, h2 = st[k2, :4]
+        if max(x2 - (x1 + w1), x1 - (x2 + w2), 0) <= gap and max(y2 - (y1 + h1), y1 - (y2 + h2), 0) <= gap: par[_f(k1)] = _f(k2)
+clusters = {}
+for k in comps: clusters.setdefault(_f(k), []).append(k)
+chosen = set(max(clusters.values(), key=lambda ks: sum(st[k, 4] for k in ks)))
 mask = np.zeros_like(op)
 for k in chosen: mask[lab == k] = 255
 ys, xs = np.nonzero(mask)
@@ -125,6 +144,12 @@ if a.total_height: check['height_scale'] = a.total_height / (Y1 - Y0)
 
 # 2b. 描边画法的隔墙：两条平行细线中间留白。闭运算把相距不到一个墙厚的平行细线填成实心带，再只留够长的带
 outlined = np.zeros(mask.shape, bool)
+# 自动判断：实心墙像素太少（外墙按 150mm 厚算，连一圈外墙都凑不够）= 墙是两条细线描边画的
+_kk = max(3, int(round(80 / s)))
+solid_ratio = float((cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((_kk, _kk), np.uint8)) > 0).sum()) * s * s / max(1.0, 2 * ((X1 - X0) + (Y1 - Y0)) * s * 150)
+if not a.outlined and solid_ratio < .35:
+    a.outlined = True
+    print(f'实心墙只够外圈的 {solid_ratio:.0%}：按“描边画法”识别（等于加了 --outlined）', file=sys.stderr)
 if a.outlined:
     thin = ((mx - mn < 40) & (mx < 150)).astype(np.uint8)
     tmax, tmin, Lmin = int(round(280 / s)) + 2, max(2, int(round(70 / s))), max(12, int(round(900 / s)))
@@ -135,6 +160,26 @@ if a.outlined:
     vb = cv2.morphologyEx(cv2.morphologyEx(vb, cv2.MORPH_OPEN, np.ones((1, tmin), np.uint8)), cv2.MORPH_OPEN, np.ones((Lmin, 1), np.uint8))
     outlined = ((hb | vb) > 0) & (roi > 0) & (mask == 0)
     mask = mask.copy(); mask[outlined] = 255
+
+# 2c. 浅灰色的隔墙：彩色户型图里非承重墙常画成亮度 175~215 的浅灰，默认门槛之外。只收细长、贴着已识别墙体的块
+light_added = 0
+if not a.wall_color and not a.no_light_walls:
+    lt = ((mx - mn < a.sat_max) & (mx >= a.gray_max) & (mx < 218)).astype(np.uint8)
+    kk = max(3, int(round(70 / s)))
+    lt = cv2.morphologyEx(lt, cv2.MORPH_OPEN, np.ones((kk, kk), np.uint8))
+    touch = cv2.dilate(mask, np.ones((5, 5), np.uint8)) > 0
+    padb = int(300 / s)
+    n3, lab3, st3, _ = cv2.connectedComponentsWithStats(lt, 8)
+    for k3 in range(1, n3):
+        x, y, w, h, area = st3[k3]
+        if x < X0 - padb or y < Y0 - padb or x + w > X1 + padb or y + h > Y1 + padb: continue
+        comp = lab3[y:y + h, x:x + w] == k3
+        # 厚度：每一行 / 列的像素数取中位数（L 形也能量）
+        tt = float(np.median(np.r_[comp.sum(0)[comp.sum(0) > 0], comp.sum(1)[comp.sum(1) > 0]])) * s
+        if max(w, h) * s < 500 or not (50 <= tt <= 300): continue
+        if not touch[y:y + h, x:x + w][comp].any(): continue
+        mask[y:y + h, x:x + w][comp] = 255; light_added += 1
+    if light_added: print(f'浅灰隔墙：补了 {light_added} 块（--no-light-walls 关闭）', file=sys.stderr)
 
 # 3. 拆成水平/竖直墙段：每个像素比较所在水平连续段和竖直连续段的长度
 m = mask > 0
@@ -217,6 +262,30 @@ for q in segs:
         q['why'] = f"图上墙体颜色一致，按厚度 {tmm:.0f}mm 猜{'承重' if q['dark'] else '非承重'}"
 
 
+# 3c. 墙在窗处断开、窗的另一头接的是转角（垂直墙）而不是同一条线上的墙：断口逻辑配不上，墙会少一截。
+#     墙端往前看到最近一面横穿过来的垂直墙，中间的墙带里有 ≥2 条贯通的线（窗线、玻璃）或彩色窗块 → 墙延到那面墙，中间记一个窗
+winish = ((mx - mn < 30) & (mx >= 90) & (mx < 238)) | ((mx - mn >= 30) & (mx < 245))
+for q in segs:
+    for end in (0, 1):
+        sp = q['s1'] if end else q['s0']
+        best = None
+        for r in segs:
+            if r['orient'] == q['orient'] or not (r['s0'] - 3 <= q['line'] <= r['s1'] + 3): continue
+            d = (r['line'] - r['t'] / 2 - sp) if end else (sp - r['line'] - r['t'] / 2)
+            if d > 3 and d * s <= 3200 and (best is None or d < best[0]): best = (d, r)
+        if not best: continue
+        d, r = best
+        g0, g1 = (sp, r['line'] - r['t'] / 2) if end else (r['line'] + r['t'] / 2, sp)
+        if any(o is not q and o['orient'] == q['orient'] and abs(o['line'] - q['line']) <= max(2, q['t'] * .6) and o['s0'] < g1 and o['s1'] > g0 for o in segs): continue
+        lo, hi = int(q['line'] - q['t'] / 2), int(q['line'] + q['t'] / 2) + 1
+        bandw = winish[lo:hi, int(g0):int(g1)] if q['orient'] == 'h' else winish[int(g0):int(g1), lo:hi].T
+        if bandw.size == 0 or bandw.shape[1] < 3: continue
+        full = (bandw.mean(1) > .7).sum()
+        if full >= 2:
+            if end: q['s1'] = r['line']
+            else: q['s0'] = r['line']
+            q.setdefault('ext', []).append((g0, g1))
+
 # 4. 断口：同一条线上两段墙之间的空隙 → 门窗候选
 light = (mx - mn < 30) & (mx >= 110) & (mx < 235)  # 窗户在墙带里画成细灰线
 gaps = []
@@ -238,8 +307,12 @@ for o in ('h', 'v'):
 
 # 5. 换算成 mm（原点 = 墙体外轮廓左上角），墙端点吸附到相交墙的中线
 R = lambda v: int(round(v / 5.0) * 5)
-mmx = lambda px: (px - X0) * s
-mmy = lambda py: (py - Y0) * s
+if a.origin:
+    mmx = lambda px: px * s + a.origin[0]
+    mmy = lambda py: py * s + a.origin[1]
+else:
+    mmx = lambda px: (px - X0) * s
+    mmy = lambda py: (py - Y0) * s
 def endpoint(q, at_start):
     sp = q['s0'] if at_start else q['s1']
     best = None
@@ -259,7 +332,8 @@ for i, q in enumerate(segs):
     if q['orient'] == 'h': A, B = [R(mmx(e0)), R(mmy(q['line']))], [R(mmx(e1)), R(mmy(q['line']))]
     else: A, B = [R(mmx(q['line'])), R(mmy(e0))], [R(mmx(q['line'])), R(mmy(e1))]
     if A == B: continue
-    walls.append(dict(id=f'W{i}', a=A, b=B, t=t, bearing=bool(q['dark']), openings=[], _sure=q['sure']))
+    ops = [dict(type='window', **{'from': R((mmx if q['orient'] == 'h' else mmy)(g0)), 'to': R((mmx if q['orient'] == 'h' else mmy)(g1))}, _ext=True) for g0, g1 in q.get('ext', [])]
+    walls.append(dict(id=f'W{i}', a=A, b=B, t=t, bearing=bool(q['dark']), openings=ops, _sure=q['sure']))
 byid = {w['id']: w for w in walls}
 for j, g in enumerate(gaps):
     # 断口用一段墙跨过去：把两侧墙合并成一段，门窗挂在上面
@@ -310,13 +384,13 @@ draft = {
     'name': '我的户型', 'height': 2800, 'phase': 'renovate',
     'walls': [{k: v for k, v in w.items() if not k.startswith('_')} for w in walls],
     'rooms': [],
-    'underlay': {'image': os.path.abspath(a.image), 'mmPerPx': round(s, 4), 'x': round(-X0 * s), 'y': round(-Y0 * s)},
+    'underlay': {'image': os.path.abspath(a.image), 'mmPerPx': round(s, 4), 'x': round(mmx(0)), 'y': round(mmy(0))},
 }
 for w in draft['walls']:
     if not w['openings']: del w['openings']
 json.dump(draft, open(os.path.join(out_dir, 'draft.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 json.dump(dict(image=os.path.abspath(a.image), size=[W, H], mmPerPx=s, scale_from=how, scale_check=check,
-               outline_px=[X0, Y0, X1, Y1], outline_mm=[round((X1 - X0) * s), round((Y1 - Y0) * s)],
+               outline_px=[X0, Y0, X1, Y1], solid_ratio=round(solid_ratio, 3), outlined=bool(a.outlined), outline_mm=[round((X1 - X0) * s), round((Y1 - Y0) * s)],
                bearing_by=bearing_by, bearing_threshold=thr, segments_px=segs, gaps_px=gaps, dims_px=dims_px), open(os.path.join(out_dir, 'analysis.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 Image.fromarray(mask).save(os.path.join(out_dir, 'mask.png'))
 
